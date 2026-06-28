@@ -1,20 +1,13 @@
-// Export your models here. Add one export per file
-// export * from "./posts";
-//
-// Each model/table should ideally be split into different files.
-// Each model/table should define a Drizzle table, insert schema, and types:
-//
-//   import { pgTable, text, serial } from "drizzle-orm/pg-core";
-//   import { createInsertSchema } from "drizzle-zod";
-//   import { z } from "zod/v4";
-//
-//   export const postsTable = pgTable("posts", {
-//     id: serial("id").primaryKey(),
-//     title: text("title").notNull(),
-//   });
-//
-//   export const insertPostSchema = createInsertSchema(postsTable).omit({ id: true });
-//   export type InsertPost = z.infer<typeof insertPostSchema>;
-//   export type Post = typeof postsTable.$inferSelect;
+import { pgTable, text, jsonb, timestamp } from "drizzle-orm/pg-core";
 
-export {}
+// A live spectator session. `state` holds the full serialized bracket
+// (playerCount, names, results, series, format) pushed by the host.
+export const sessionsTable = pgTable("sessions", {
+  code: text("code").primaryKey(),
+  state: jsonb("state").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export type SessionRow = typeof sessionsTable.$inferSelect;
+export type InsertSession = typeof sessionsTable.$inferInsert;

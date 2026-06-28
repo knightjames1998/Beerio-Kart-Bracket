@@ -54,7 +54,10 @@ const lbSlotH = (i: number) => SLOT_BASE * Math.pow(2, Math.floor(i / 2));
 const MIN_PLAYERS = 2, MAX_PLAYERS = 16, DEFAULT_COUNT = 8;
 const ITEM_ICONS  = ["🍄","🍌","⭐","🐢","💥","🔥","🪙"];
 const STORAGE_KEY = "beerio-kart-state-v1";
+const SESSION_KEY = "beerio-kart-session-v1";
+const API = "/api";
 const DEFAULT_FORMAT: Format = { series: 1, heatSize: 2 };
+type LiveStatus = "idle" | "connecting" | "live" | "error";
 
 // ─── Bracket engine ───────────────────────────────────────────────────────────
 function nextPow2(n: number) { let s=1; while(s<n) s*=2; return Math.max(2,s); }
@@ -506,28 +509,67 @@ function FormatModal({format,onChange,onClose}:{format:Format;onChange:(f:Partia
 }
 
 // ─── Share / Spectator (QR) Modal ─────────────────────────────────────────────
-function ShareModal({url,onClose}:{url:string;onClose:()=>void}){
-  const [copied,setCopied]=useState(false);
-  const copy=async()=>{
-    try{await navigator.clipboard.writeText(url);setCopied(true);setTimeout(()=>setCopied(false),1600);}catch{/* clipboard blocked */}
+function CopyRow({value,id,copied,onCopy}:{value:string;id:"live"|"snap";copied:""|"live"|"snap";onCopy:(id:"live"|"snap",v:string)=>void}){
+  return(
+    <div className="w-full flex items-center gap-2">
+      <input readOnly value={value} onFocus={e=>e.currentTarget.select()}
+        className="flex-1 min-w-0 px-2.5 py-2 bg-white border-2 border-[var(--ink)] rounded-[9px] font-[Nunito] text-[11px] font-semibold text-[var(--ink-soft)] outline-none truncate"/>
+      <button onClick={()=>onCopy(id,value)} style={{touchAction:"manipulation"}}
+        className="flex-shrink-0 px-3 py-2 rounded-[9px] border-2 border-[var(--ink)] bg-[var(--sun)] hover:bg-[var(--sun-deep)] font-[Fredoka] font-semibold text-[12px] text-[var(--ink)] shadow-[0_2px_0_rgba(22,35,59,.22)] active:translate-y-px transition-all cursor-pointer">
+        {copied===id?"Copied!":"Copy"}
+      </button>
+    </div>
+  );
+}
+
+function ShareModal({code,status,liveUrl,snapshotUrl,onClose,onRetry}:{
+  code:string|null;status:LiveStatus;liveUrl:string;snapshotUrl:string;onClose:()=>void;onRetry:()=>void;
+}){
+  const [copied,setCopied]=useState<""|"live"|"snap">("");
+  const copy=async(id:"live"|"snap",val:string)=>{
+    try{await navigator.clipboard.writeText(val);setCopied(id);setTimeout(()=>setCopied(""),1500);}catch{/* clipboard blocked */}
   };
   return(
-    <ModalShell onClose={onClose} title="📺 SPECTATOR VIEW" subtitle="Scan to follow the bracket on another screen.">
+    <ModalShell onClose={onClose} title="📺 SPECTATOR VIEW" subtitle="Scan to follow the bracket live on another screen.">
       <div className="px-5 py-5 flex flex-col items-center gap-4">
-        <div className="bg-white border-[3px] border-[var(--ink)] rounded-[14px] p-3 shadow-[0_3px_0_rgba(22,35,59,.18)]">
-          <QRCodeSVG value={url} size={196} bgColor="#FFFFFF" fgColor="#16233B" level="M" includeMargin={false}/>
-        </div>
-        <p className="font-[Nunito] text-[12px] font-semibold text-[var(--muted)] text-center leading-relaxed m-0">
-          Opens a read-only copy of the bracket as it looks right now. It's a snapshot — re-open this and re-scan to share the latest standings.
-        </p>
-        <div className="w-full flex items-center gap-2">
-          <input readOnly value={url} onFocus={e=>e.currentTarget.select()}
-            className="flex-1 min-w-0 px-2.5 py-2 bg-white border-2 border-[var(--ink)] rounded-[9px] font-[Nunito] text-[11px] font-semibold text-[var(--ink-soft)] outline-none truncate"/>
-          <button onClick={copy} style={{touchAction:"manipulation"}}
-            className="flex-shrink-0 px-3 py-2 rounded-[9px] border-2 border-[var(--ink)] bg-[var(--sun)] hover:bg-[var(--sun-deep)] font-[Fredoka] font-semibold text-[12px] text-[var(--ink)] shadow-[0_2px_0_rgba(22,35,59,.22)] active:translate-y-px transition-all cursor-pointer">
-            {copied?"Copied!":"Copy"}
-          </button>
-        </div>
+        {status==="connecting"&&!code&&(
+          <div className="py-10 flex flex-col items-center gap-3">
+            <span className="text-3xl animate-pulse">📡</span>
+            <p className="font-[Fredoka] font-semibold text-[13px] text-[var(--muted)] m-0">Starting live session…</p>
+          </div>
+        )}
+        {status==="error"&&!code&&(
+          <div className="w-full flex flex-col items-center gap-3 text-center">
+            <span className="text-3xl">🔌</span>
+            <p className="font-[Nunito] font-semibold text-[12.5px] text-[var(--ink-soft)] m-0 leading-relaxed">
+              Couldn't reach the live server. Make sure the app is running with its API server (see setup notes), or use the one-time snapshot link below.
+            </p>
+            <button onClick={onRetry} style={{touchAction:"manipulation"}}
+              className="px-4 py-2 rounded-[9px] border-2 border-[var(--ink)] bg-[var(--sun)] hover:bg-[var(--sun-deep)] font-[Fredoka] font-semibold text-[12.5px] text-[var(--ink)] shadow-[0_2px_0_rgba(22,35,59,.22)] active:translate-y-px transition-all cursor-pointer">
+              Try again
+            </button>
+          </div>
+        )}
+        {code&&(
+          <>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full" style={{background:status==="live"?"var(--grass)":"var(--coral)",boxShadow:"0 0 0 2px rgba(22,35,59,.15)"}}/>
+              <span className="font-[Fredoka] font-bold text-[12.5px] text-[var(--ink)] tracking-wide">{status==="live"?"LIVE":"reconnecting…"} · Room {code}</span>
+            </div>
+            <div className="bg-white border-[3px] border-[var(--ink)] rounded-[14px] p-3 shadow-[0_3px_0_rgba(22,35,59,.18)]">
+              <QRCodeSVG value={liveUrl} size={196} bgColor="#FFFFFF" fgColor="#16233B" level="M" includeMargin={false}/>
+            </div>
+            <p className="font-[Nunito] text-[12px] font-semibold text-[var(--muted)] text-center leading-relaxed m-0">
+              Scan to watch the bracket update in real time as you record results. Anyone with the link follows along live — they can't edit.
+            </p>
+            <CopyRow value={liveUrl} id="live" copied={copied} onCopy={copy}/>
+          </>
+        )}
+        <details className="w-full">
+          <summary className="cursor-pointer font-[Nunito] text-[11px] font-bold text-[var(--muted)] select-none">One-time snapshot link (no live updates)</summary>
+          <p className="font-[Nunito] text-[10.5px] font-semibold text-[var(--muted)] mt-1.5 mb-2 leading-snug">A frozen copy of the bracket right now. Works without the server, but won't refresh.</p>
+          <CopyRow value={snapshotUrl} id="snap" copied={copied} onCopy={copy}/>
+        </details>
       </div>
     </ModalShell>
   );
@@ -602,7 +644,9 @@ function loadSaved():SavedState|null{
 // ─── App ─────────────────────────────────────────────────────────────────────
 export default function App(){
   const spectatorInit=useMemo(()=>readSpectator(),[]);
-  const isSpectator=!!spectatorInit;
+  const liveCode=useMemo(()=>(typeof location!=="undefined")?new URLSearchParams(location.search).get("s"):null,[]);
+  const isLive=!!liveCode;
+  const isSpectator=!!spectatorInit||isLive;
   const initial=useMemo<SavedState>(()=>{
     const base=spectatorInit ?? (isSpectator?null:loadSaved());
     if(base)return {
@@ -624,12 +668,74 @@ export default function App(){
   const [rulesOpen,setRulesOpen]=useState(false);
   const [formatOpen,setFormatOpen]=useState(false);
   const [shareOpen,setShareOpen]=useState(false);
+  const [sessionCode,setSessionCode]=useState<string|null>(()=>{
+    if(isLive||typeof localStorage==="undefined")return null;
+    try{return localStorage.getItem(SESSION_KEY)||null;}catch{return null;}
+  });
+  const [liveStatus,setLiveStatus]=useState<LiveStatus>(isLive?"connecting":"idle");
 
   // Persist (host only — never overwrite saved state while viewing a shared snapshot)
   useEffect(()=>{
     if(isSpectator||typeof localStorage==="undefined")return;
     try{localStorage.setItem(STORAGE_KEY,JSON.stringify({playerCount,names,results,series,format}));}catch{/* quota */}
   },[isSpectator,playerCount,names,results,series,format]);
+
+  // Host: push state to the live room (debounced) whenever it changes
+  useEffect(()=>{
+    if(isSpectator||!sessionCode)return;
+    const t=setTimeout(()=>{
+      fetch(`${API}/sessions/${sessionCode}`,{method:"PUT",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({state:{playerCount,names,results,series,format}})})
+        .then(r=>{if(!r.ok)throw new Error();setLiveStatus("live");})
+        .catch(()=>setLiveStatus("error"));
+    },600);
+    return ()=>clearTimeout(t);
+  },[isSpectator,sessionCode,playerCount,names,results,series,format]);
+
+  // Spectator: poll the live room every few seconds and mirror its state
+  useEffect(()=>{
+    if(!liveCode)return;
+    let active=true;
+    const apply=(s:Partial<SavedState>|undefined)=>{
+      if(!active||!s)return;
+      const pc=Math.max(MIN_PLAYERS,Math.min(MAX_PLAYERS,Number(s.playerCount)||DEFAULT_COUNT));
+      setPlayerCount(pc);
+      setNames(()=>{const a=Array.isArray(s.names)?[...s.names].slice(0,pc):[];while(a.length<pc)a.push("");return a;});
+      setResults(s.results||{});
+      setSeries(s.series||{});
+      setFormat({...DEFAULT_FORMAT,...(s.format||{})});
+      setBR(buildBracket(pc));
+    };
+    const tick=async()=>{
+      try{
+        const r=await fetch(`${API}/sessions/${liveCode}`);
+        if(r.ok){const d=await r.json();apply(d.state);setLiveStatus("live");}
+        else setLiveStatus("error");
+      }catch{setLiveStatus("error");}
+    };
+    tick();
+    const id=setInterval(tick,3000);
+    return ()=>{active=false;clearInterval(id);};
+  },[liveCode]);
+
+  // Host: open a live room (create on first share, reuse the saved code after)
+  const startLive=useCallback(async ()=>{
+    setLiveStatus("connecting");
+    const payload=JSON.stringify({state:{playerCount,names,results,series,format}});
+    try{
+      if(sessionCode){
+        const r=await fetch(`${API}/sessions/${sessionCode}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:payload});
+        if(!r.ok)throw new Error();
+        setLiveStatus("live");return;
+      }
+      const r=await fetch(`${API}/sessions`,{method:"POST",headers:{"Content-Type":"application/json"},body:payload});
+      if(!r.ok)throw new Error();
+      const {code}=await r.json();
+      setSessionCode(code);
+      try{localStorage.setItem(SESSION_KEY,code);}catch{/* ignore */}
+      setLiveStatus("live");
+    }catch{setLiveStatus("error");}
+  },[sessionCode,playerCount,names,results,series,format]);
 
   const handleSetCount=useCallback((n:number)=>{
     const next=Math.max(MIN_PLAYERS,Math.min(MAX_PLAYERS,n));
@@ -738,7 +844,8 @@ export default function App(){
     return map;
   },[BR]);
 
-  const shareURL=useMemo(()=>shareOpen?buildShareURL({playerCount,names,results,series,format}):"",[shareOpen,playerCount,names,results,series,format]);
+  const liveUrl=useMemo(()=>(sessionCode&&typeof location!=="undefined")?`${location.origin}${location.pathname}?s=${sessionCode}`:"",[sessionCode]);
+  const snapshotUrl=useMemo(()=>shareOpen?buildShareURL({playerCount,names,results,series,format}):"",[shareOpen,playerCount,names,results,series,format]);
 
   return(
     <>
@@ -754,7 +861,7 @@ export default function App(){
       <div className="app-main min-h-screen">
         {rulesOpen&&<RulesModal onClose={()=>setRulesOpen(false)}/>}
         {formatOpen&&<FormatModal format={format} onChange={handleFormatChange} onClose={()=>setFormatOpen(false)}/>}
-        {shareOpen&&<ShareModal url={shareURL} onClose={()=>setShareOpen(false)}/>}
+        {shareOpen&&<ShareModal code={sessionCode} status={liveStatus} liveUrl={liveUrl} snapshotUrl={snapshotUrl} onClose={()=>setShareOpen(false)} onRetry={startLive}/>}
 
         {/* Header */}
         <header className="relative border-b-[3px] border-[var(--ink)] overflow-hidden" style={{
@@ -766,13 +873,13 @@ export default function App(){
                 style={{WebkitTextStroke:"2px var(--ink)",textShadow:"3px 3px 0 var(--ink)",transform:"rotate(-2deg)"}}>BEERIO KART</h1>
               <div className="font-[Fredoka] font-semibold text-[11.5px] tracking-wider text-[var(--ink)] bg-[var(--foam)] border-2 border-[var(--ink)] rounded-full px-2.5 py-1 inline-flex items-center gap-2 self-start shadow-[0_2px_0_rgba(22,35,59,.18)]">
                 <span className="w-1.5 h-1.5 rounded-full bg-[var(--grass)] shadow-[0_0_0_1.5px_var(--ink)]"/>
-                {isSpectator?"📺 Spectator View":"🏎️ Double Elimination Night"}
+                {isSpectator?(isLive?"📺 Live Spectator":"📺 Spectator View"):(sessionCode&&liveStatus==="live"?`🔴 LIVE · Room ${sessionCode}`:"🏎️ Double Elimination Night")}
               </div>
             </div>
             <div className="flex items-center gap-2.5">
               {!isSpectator&&(
                 <>
-                  <button onClick={()=>setShareOpen(true)} title="Spectator view / QR"
+                  <button onClick={()=>{setShareOpen(true);startLive();}} title="Spectator view / QR"
                     className="w-9 h-9 rounded-[10px] border-2 border-[var(--ink)] bg-[var(--foam)] text-[var(--ink)] text-[15px] grid place-items-center shadow-[0_3px_0_rgba(22,35,59,.22)] hover:bg-white active:translate-y-px transition-all cursor-pointer flex-shrink-0" style={{touchAction:"manipulation"}}>📺</button>
                   <button onClick={()=>setFormatOpen(true)} title="Format"
                     className="w-9 h-9 rounded-[10px] border-2 border-[var(--ink)] bg-[var(--foam)] text-[var(--ink)] text-[15px] grid place-items-center shadow-[0_3px_0_rgba(22,35,59,.22)] hover:bg-white active:translate-y-px transition-all cursor-pointer flex-shrink-0" style={{touchAction:"manipulation"}}>⚙️</button>
@@ -795,7 +902,14 @@ export default function App(){
         {isSpectator&&(
           <div className="max-w-[1360px] mx-auto px-4 mt-3">
             <div className="flex flex-wrap items-center justify-between gap-2 bg-[var(--grape)] text-white border-2 border-[var(--ink)] rounded-[11px] px-4 py-2 shadow-[0_3px_0_rgba(22,35,59,.22)]">
-              <span className="font-[Fredoka] font-semibold text-[12.5px]">📺 You're watching a shared snapshot — read only.</span>
+              <span className="font-[Fredoka] font-semibold text-[12.5px] flex items-center gap-2">
+                {isLive?(
+                  <>
+                    <span className="w-2.5 h-2.5 rounded-full inline-block" style={{background:liveStatus==="live"?"#7CFFB0":"#FFC9C9"}}/>
+                    {liveStatus==="error"?"Can't reach the host — the room may have ended.":liveStatus==="live"?"Watching live — updates automatically.":"Connecting to live room…"}
+                  </>
+                ):"📺 You're watching a shared snapshot — read only."}
+              </span>
               <button onClick={editCopy} style={{touchAction:"manipulation"}}
                 className="font-[Fredoka] font-bold text-[12px] bg-white text-[var(--ink)] border-2 border-[var(--ink)] rounded-[8px] px-3 py-1 shadow-[0_2px_0_rgba(22,35,59,.25)] active:translate-y-px cursor-pointer">Edit a copy</button>
             </div>

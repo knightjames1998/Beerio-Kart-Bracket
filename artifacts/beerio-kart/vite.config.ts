@@ -66,6 +66,10 @@ export default defineConfig({
     fs: {
       strict: true,
     },
+    // Dev only: forward API calls to the Express server on port 5000.
+    proxy: {
+      "/api": { target: "http://localhost:5000", changeOrigin: true },
+    },
   },
   preview: {
     port,

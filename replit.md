@@ -1,45 +1,51 @@
-# [Project name]
+# Beerio Kart Bracket
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A double-elimination tournament bracket for Beerio Kart (Mario Kart + drinks),
+with live spectator view, QR sharing, match history, and Best-of-N formats.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+### Production (single server — recommended for game night)
+The API server serves both the built front end and the `/api` routes on one port.
+- `pnpm run prod` — build web + api, then start the server (uses `PORT`)
+- On Replit: set the Run/Deploy command to `pnpm run prod`
+
+### Live spectator sync requires the API server to be running
+The 📺 share button creates a live "room"; spectators open `/?s=CODE` and poll it.
+If the API server is not running, sharing falls back to a one-time snapshot link.
+
+### Database (durable rooms)
+- Provision Postgres (Replit: add the PostgreSQL tool → sets `DATABASE_URL`)
+- `pnpm --filter @workspace/db run push` — create the `sessions` table
+- Without `DATABASE_URL` the server uses an in-memory store: fine for a single
+  dev instance, but rooms are lost on restart and won't work across autoscale.
+
+### Dev (two processes, hot reload)
+- Terminal 1: `pnpm run dev:api`  (Express on :5000, in-memory unless DATABASE_URL set)
+- Terminal 2: `pnpm run dev:web`  (Vite on :3000, proxies `/api` → :5000)
+
+### Other
 - `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `pnpm --filter @workspace/beerio-kart run build` — front end only (needs PORT, BASE_PATH)
 
 ## Stack
-
 - pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Front end: React + Vite + Tailwind v4 (artifacts/beerio-kart)
+- API: Express 5 (artifacts/api-server) — serves the SPA + `/api` in production
+- DB: PostgreSQL + Drizzle ORM (lib/db) — `sessions` table for live rooms
 
 ## Where things live
-
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- Bracket app + engine: `artifacts/beerio-kart/src/App.tsx`
+- Live session store (pg + in-memory fallback): `artifacts/api-server/src/lib/store.ts`
+- Session routes (POST/PUT/GET): `artifacts/api-server/src/routes/sessions.ts`
+- DB schema: `lib/db/src/schema/index.ts`
 
 ## Architecture decisions
-
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
-
-## Product
-
-_Describe the high-level user-facing capabilities of this app once they exist._
-
-## User preferences
-
-_Populate as you build — explicit user instructions worth remembering across sessions._
-
-## Gotchas
-
-_Populate as you build — sharp edges, "always run X before Y" rules._
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- The bracket engine is pure and 1v1 at every node (verified: 2-16 players each
+  crown a real champion with exactly 2N-2 playable matches). "4-Kart Heat" is a
+  scoring/format option layered on top, not a structural change to the bracket.
+- Live sync is snapshot-push + poll (host PUTs on change, spectators GET every 3s),
+  which needs no websockets and survives the Replit autoscale model when backed by
+  Postgres.
+- The API server also serves the built SPA so host and spectators share one origin
+  (no CORS surprises, one deploy).
