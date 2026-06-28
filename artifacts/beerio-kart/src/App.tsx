@@ -472,8 +472,8 @@ export default function App(){
 
   // Grand Final score — WB champ always starts 1-0
   const gfMatch=M["GF"];
-  const gfA=gfMatch?.a!==TBD&&gfMatch?.a!==BYE&&gfMatch?.a?gfMatch.a:null;
-  const gfB=gfMatch?.b!==TBD&&gfMatch?.b!==BYE&&gfMatch?.b?gfMatch.b:null;
+  const gfA=gfMatch?.a!==TBD&&gfMatch?.a!==BYE&&gfMatch?.a?(gfMatch.a as Player).name??null:null;
+  const gfB=gfMatch?.b!==TBD&&gfMatch?.b!==BYE&&gfMatch?.b?(gfMatch.b as Player).name??null:null;
   const gfBothKnown=!!(gfA&&gfB);
   let gfScoreA=1,gfScoreB=0; // WB starts 1-0
   if(gfMatch?.decided){
@@ -667,8 +667,12 @@ export default function App(){
 
             {/* Legend */}
             <div className="flex flex-wrap gap-3 mt-5 pt-3 border-t-2 border-dotted border-[#C9BFA8] font-[Nunito] text-[11px] font-bold text-[var(--ink-soft)]">
-              {[["var(--grass)","🍄 Winners"],["var(--coral)","🐢 Losers"],["var(--grape)","⭐ Grand Final"]].map(([c,l])=>(
-                <span key={l} className="flex items-center gap-1"><span className="w-3 h-3 rounded-[3px] border border-[var(--ink)]" style={{background:c+"66"}}/>{l}</span>
+              {([
+                ["rgba(47,185,105,0.45)","var(--grass)","🍄 Winners"],
+                ["rgba(255,90,90,0.45)","var(--coral)","🐢 Losers"],
+                ["rgba(124,92,255,0.45)","var(--grape)","⭐ Grand Final"],
+              ] as [string,string,string][]).map(([bg,border,l])=>(
+                <span key={l} className="flex items-center gap-1"><span className="w-3 h-3 rounded-[3px] border-2" style={{background:bg,borderColor:border}}/>{l}</span>
               ))}
               <span>👉 Tap a racer to mark the heat winner. Tap again to undo.</span>
             </div>
