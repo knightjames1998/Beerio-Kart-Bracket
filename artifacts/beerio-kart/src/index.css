@@ -1,0 +1,60 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: var(--app-font-sans);
+  --font-serif: var(--app-font-serif);
+  --font-mono: var(--app-font-mono);
+}
+
+:root {
+  --ink: #16233B;
+  --ink-soft: #41506B;
+  --sky-top: #74CEFF;
+  --sky-bot: #BFEAFF;
+  --cream: #FFF6E6;
+  --card: #FFFFFF;
+  --card2: #FFF1D8;
+  --sun: #FFC02E;
+  --sun-deep: #F2A40C;
+  --grass: #2FB969;
+  --grass-deep: #1FA058;
+  --coral: #FF5A5A;
+  --coral-deep: #E8413F;
+  --grape: #7C5CFF;
+  --grape-deep: #5E3FE0;
+  --foam: #FFFDF6;
+  --muted: #6E7C93;
+
+  --app-font-sans: 'Nunito', system-ui, sans-serif;
+  --app-font-serif: Georgia, serif;
+  --app-font-mono: Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background:
+    repeating-linear-gradient(116deg, rgba(22,35,59,0.022) 0 2px, transparent 2px 24px),
+    var(--cream);
+  color: var(--ink);
+  font-family: 'Nunito', system-ui, sans-serif;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer base {
+  * {
+    border-color: var(--ink);
+  }
+}

@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Beerio Kart Bracket"
+version = "1.0.0"
+id = "artifacts/beerio-kart"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20492
+
+[services.development]
+run = "pnpm --filter @workspace/beerio-kart run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/beerio-kart", "run", "build" ]
+publicDir = "artifacts/beerio-kart/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20492"
+BASE_PATH = "/"

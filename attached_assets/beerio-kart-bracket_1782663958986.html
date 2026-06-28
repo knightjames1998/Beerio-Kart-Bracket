@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Beerio Kart · Double Elimination</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#16233B;
+    --ink-soft:#41506B;
+    --line:#16233B;
+    --sky-top:#74CEFF;
+    --sky-bot:#BFEAFF;
+    --cream:#FFF6E6;
+    --card:#FFFFFF;
+    --card2:#FFF1D8;
+    --sun:#FFC02E;
+    --sun-deep:#F2A40C;
+    --grass:#2FB969;
+    --grass-deep:#1FA058;
+    --coral:#FF5A5A;
+    --coral-deep:#E8413F;
+    --grape:#7C5CFF;
+    --grape-deep:#5E3FE0;
+    --foam:#FFFDF6;
+    --text:#16233B;
+    --muted:#6E7C93;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      repeating-linear-gradient(116deg, rgba(22,35,59,0.022) 0 2px, transparent 2px 24px),
+      var(--cream);
+    color:var(--text);
+    font-family:"Nunito", system-ui, sans-serif;
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ---------- Header (the race-day scene) ---------- */
+  header{
+    position:relative;
+    border-bottom:4px solid var(--ink);
+    overflow:hidden;
+    background:
+      url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%201440%20240%27%20preserveAspectRatio%3D%27none%27%3E%0A%3Cg%20fill%3D%27%23FFFFFF%27%3E%0A%3Cellipse%20cx%3D%27170%27%20cy%3D%2750%27%20rx%3D%2772%27%20ry%3D%2726%27%2F%3E%3Cellipse%20cx%3D%27232%27%20cy%3D%2742%27%20rx%3D%2746%27%20ry%3D%2722%27%2F%3E%3Cellipse%20cx%3D%27120%27%20cy%3D%2744%27%20rx%3D%2740%27%20ry%3D%2718%27%2F%3E%0A%3Cellipse%20cx%3D%271080%27%20cy%3D%2738%27%20rx%3D%2780%27%20ry%3D%2728%27%2F%3E%3Cellipse%20cx%3D%271152%27%20cy%3D%2750%27%20rx%3D%2752%27%20ry%3D%2722%27%2F%3E%0A%3Cellipse%20cx%3D%27640%27%20cy%3D%2728%27%20rx%3D%2756%27%20ry%3D%2720%27%2F%3E%3Cellipse%20cx%3D%27590%27%20cy%3D%2734%27%20rx%3D%2734%27%20ry%3D%2715%27%2F%3E%0A%3C%2Fg%3E%0A%3Cpath%20d%3D%27M0%2C168%20C220%2C118%20430%2C150%20690%2C140%20C960%2C128%201160%2C108%201440%2C150%20L1440%2C240%20L0%2C240%20Z%27%20fill%3D%27%236FD79A%27%2F%3E%0A%3Cpath%20d%3D%27M0%2C208%20C260%2C168%20520%2C200%20770%2C196%20C1050%2C190%201250%2C176%201440%2C200%20L1440%2C240%20L0%2C240%20Z%27%20fill%3D%27%233CB873%27%2F%3E%0A%3Crect%20x%3D%271188%27%20y%3D%27146%27%20width%3D%275%27%20height%3D%2758%27%20rx%3D%272%27%20fill%3D%27%2316233B%27%2F%3E%0A%3Crect%20x%3D%271193%27%20y%3D%27146%27%20width%3D%2746%27%20height%3D%2730%27%20fill%3D%27%23FFFFFF%27%20stroke%3D%27%2316233B%27%20stroke-width%3D%272%27%2F%3E%0A%3Cg%20fill%3D%27%2316233B%27%3E%0A%3Crect%20x%3D%271193%27%20y%3D%27146%27%20width%3D%2711.5%27%20height%3D%277.5%27%2F%3E%3Crect%20x%3D%271216%27%20y%3D%27146%27%20width%3D%2711.5%27%20height%3D%277.5%27%2F%3E%0A%3Crect%20x%3D%271204.5%27%20y%3D%27153.5%27%20width%3D%2711.5%27%20height%3D%277.5%27%2F%3E%3Crect%20x%3D%271227.5%27%20y%3D%27153.5%27%20width%3D%2711.5%27%20height%3D%277.5%27%2F%3E%0A%3Crect%20x%3D%271193%27%20y%3D%27161%27%20width%3D%2711.5%27%20height%3D%277.5%27%2F%3E%3Crect%20x%3D%271216%27%20y%3D%27161%27%20width%3D%2711.5%27%20height%3D%277.5%27%2F%3E%0A%3Crect%20x%3D%271204.5%27%20y%3D%27168.5%27%20width%3D%2711.5%27%20height%3D%277.5%27%2F%3E%3Crect%20x%3D%271227.5%27%20y%3D%27168.5%27%20width%3D%2711.5%27%20height%3D%277.5%27%2F%3E%0A%3C%2Fg%3E%0A%3C%2Fsvg%3E") no-repeat center bottom / 100% 240px,
+      linear-gradient(180deg, var(--sky-top) 0%, var(--sky-bot) 78%);
+  }
+  .checker{
+    height:16px;
+    background-image:
+      linear-gradient(45deg,#16233B 25%,transparent 25%),
+      linear-gradient(-45deg,#16233B 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,#16233B 75%),
+      linear-gradient(-45deg,transparent 75%,#16233B 75%);
+    background-size:16px 16px;
+    background-position:0 0,0 8px,8px -8px,-8px 0;
+    background-color:#FFFFFF;
+    border-bottom:3px solid var(--ink);
+  }
+  .head-inner{
+    position:relative;z-index:2;
+    max-width:1280px;margin:0 auto;padding:26px 20px 30px;
+    display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;justify-content:space-between;
+  }
+  .wordmark{display:flex;flex-direction:column;gap:12px;}
+  .wordmark h1{
+    font-family:"Luckiest Guy", cursive;
+    font-size:clamp(26px,4.4vw,46px);
+    margin:0;line-height:.96;letter-spacing:1px;
+    color:var(--sun);
+    -webkit-text-stroke:2px var(--ink);
+    text-shadow:4px 4px 0 var(--ink);
+    transform:rotate(-2deg);
+  }
+  .wordmark .sub{
+    font-family:"Fredoka",sans-serif;
+    font-weight:600;font-size:13px;letter-spacing:1px;
+    color:var(--ink);background:var(--foam);
+    border:2px solid var(--ink);border-radius:999px;
+    padding:5px 13px;display:inline-flex;align-items:center;gap:9px;align-self:flex-start;
+    box-shadow:0 3px 0 rgba(22,35,59,.2);
+  }
+  .sub .dot{width:8px;height:8px;border-radius:50%;background:var(--grass);box-shadow:0 0 0 2px var(--ink);}
+
+  /* progress mug */
+  .pint-wrap{display:flex;align-items:center;gap:20px;background:var(--foam);
+    border:3px solid var(--ink);border-radius:14px;padding:10px 16px;
+    box-shadow:0 4px 0 rgba(22,35,59,.22);}
+  .pint{
+    position:relative;width:54px;height:72px;
+    border:3px solid var(--ink);
+    border-radius:7px 7px 11px 11px;
+    background:rgba(255,255,255,.6);
+    overflow:hidden;
+  }
+  .pint::after{
+    content:"";position:absolute;right:-15px;top:13px;width:15px;height:32px;
+    border:3px solid var(--ink);border-left:none;border-radius:0 11px 11px 0;
+  }
+  .pint .beer{
+    position:absolute;left:0;right:0;bottom:0;height:0%;
+    background:linear-gradient(180deg,var(--sun),var(--sun-deep));
+    transition:height .5s cubic-bezier(.2,.8,.2,1);
+  }
+  .pint .foam{
+    position:absolute;left:0;right:0;height:9px;
+    background:var(--foam);border-radius:50% 50% 0 0/100% 100% 0 0;
+    transition:bottom .5s cubic-bezier(.2,.8,.2,1);
+    bottom:0%;
+  }
+  .pint-meta{font-family:"Fredoka",sans-serif;}
+  .pint-meta .big{font-size:24px;font-weight:700;color:var(--ink);line-height:1;}
+  .pint-meta .lbl{font-size:11px;color:var(--ink-soft);letter-spacing:1px;font-weight:600;margin-top:3px;}
+
+  /* ---------- Controls ---------- */
+  .controls{
+    max-width:1280px;margin:0 auto;padding:20px;
+    display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start;
+  }
+  .roster{flex:1 1 420px;min-width:280px;}
+  .roster .roster-head{
+    font-family:"Fredoka",sans-serif;letter-spacing:.5px;
+    font-weight:700;font-size:15px;color:var(--ink);margin-bottom:12px;
+    display:flex;align-items:center;gap:14px;
+  }
+  .count-ctl{display:inline-flex;align-items:center;gap:9px;}
+  .cbtn{
+    width:32px;height:32px;border-radius:9px;border:2.5px solid var(--ink);
+    background:var(--sun);color:var(--ink);font-family:"Fredoka",sans-serif;
+    font-size:21px;font-weight:700;line-height:1;cursor:pointer;
+    display:grid;place-items:center;touch-action:manipulation;padding:0;
+    box-shadow:0 3px 0 rgba(22,35,59,.28);
+    transition:transform .06s, box-shadow .06s, background .12s;
+  }
+  .cbtn:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(22,35,59,.28);}
+  .cbtn:disabled{opacity:.4;cursor:default;box-shadow:none;background:#E7E2D5;}
+  @media (hover:hover){ .cbtn:not(:disabled):hover{background:var(--sun-deep);} }
+  .cval{
+    font-family:"Fredoka",sans-serif;font-weight:700;font-size:22px;color:var(--ink);
+    min-width:30px;text-align:center;
+  }
+  .count-cap{font-family:"Nunito";font-weight:600;font-size:11px;letter-spacing:.5px;color:var(--muted);}
+  .seeds{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;}
+  @media(min-width:560px){.seeds{grid-template-columns:repeat(4,minmax(0,1fr));}}
+  .seed-field{position:relative;}
+  .seed-field .num{
+    position:absolute;left:9px;top:50%;transform:translateY(-50%);
+    font-family:"Fredoka",sans-serif;font-weight:700;font-size:12px;
+    color:var(--ink);background:var(--sun);border:2px solid var(--ink);
+    width:22px;height:22px;border-radius:6px;display:grid;place-items:center;
+  }
+  .seed-field input{
+    width:100%;padding:12px 10px 12px 40px;
+    background:var(--card);border:2.5px solid var(--ink);border-radius:11px;
+    color:var(--ink);font-family:"Nunito",sans-serif;font-size:14px;font-weight:700;
+    outline:none;transition:box-shadow .12s, transform .06s;
+    box-shadow:0 3px 0 rgba(22,35,59,.14);
+  }
+  .seed-field input:focus{box-shadow:0 0 0 3px var(--sun),0 3px 0 rgba(22,35,59,.14);}
+  .seed-field input::placeholder{color:#A9B2C2;font-weight:600;}
+  .seed-field .byetag{
+    position:absolute;right:8px;top:50%;transform:translateY(-50%);
+    font-family:"Fredoka",sans-serif;font-weight:700;font-size:10px;letter-spacing:.5px;
+    color:#fff;background:var(--coral);border:2px solid var(--ink);
+    border-radius:6px;padding:2px 6px;pointer-events:none;display:none;
+  }
+  .seed-field.is-bye .byetag{display:inline-block;}
+  .seed-field.is-bye input{padding-right:54px;}
+
+  .btns{display:flex;flex-direction:column;gap:11px;min-width:180px;}
+  .btn{
+    font-family:"Fredoka",sans-serif;letter-spacing:.5px;
+    font-weight:600;font-size:14px;cursor:pointer;touch-action:manipulation;
+    padding:12px 15px;border-radius:12px;border:2.5px solid var(--ink);
+    background:var(--card);color:var(--ink);
+    box-shadow:0 4px 0 rgba(22,35,59,.26);
+    transition:transform .06s, box-shadow .06s, background .12s;
+    text-align:left;display:flex;align-items:center;gap:9px;
+  }
+  .btn:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(22,35,59,.26);}
+  .btn.primary{background:var(--sun);}
+  @media (hover:hover){
+    .btn:hover{background:var(--card2);}
+    .btn.primary:hover{background:var(--sun-deep);}
+  }
+  .btn .ic{font-size:16px;}
+  .hint{font-size:12.5px;color:var(--muted);margin-top:12px;line-height:1.55;font-weight:600;}
+
+  /* ---------- Stage / bracket ---------- */
+  .stage{max-width:1280px;margin:0 auto;padding:8px 20px 60px;}
+  .bsec{margin-top:30px;}
+  .bsec-head{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+  .bsec-head .tag{
+    font-family:"Luckiest Guy",cursive;letter-spacing:1px;
+    font-size:21px;color:var(--ink);
+    background:var(--sun);border:2.5px solid var(--ink);border-radius:11px;
+    padding:4px 14px;box-shadow:0 4px 0 rgba(22,35,59,.24);transform:rotate(-1deg);
+  }
+  .bsec.wb .tag{background:var(--grass);color:#fff;}
+  .bsec.lb .tag{background:var(--coral);color:#fff;}
+  .bsec.gf .tag{background:var(--grape);color:#fff;}
+  .bsec-head .rule{height:3px;background:var(--ink);opacity:.18;flex:1;border-radius:3px;}
+  .bsec-head .pip{
+    width:14px;height:14px;border:2.5px solid var(--ink);transform:rotate(45deg);border-radius:3px;
+  }
+  .wb .pip{background:var(--grass);} .lb .pip{background:var(--coral);} .gf .pip{background:var(--grape);}
+
+  .rounds{
+    display:flex;gap:18px;overflow-x:auto;padding:4px 2px 12px;
+    scrollbar-width:thin;scrollbar-color:#C9BFA8 transparent;
+  }
+  .rounds::-webkit-scrollbar{height:9px;}
+  .rounds::-webkit-scrollbar-thumb{background:#C9BFA8;border-radius:9px;}
+  .round{min-width:214px;flex:0 0 auto;display:flex;flex-direction:column;gap:14px;}
+  .round-title{
+    font-family:"Fredoka",sans-serif;letter-spacing:.5px;
+    font-size:12.5px;font-weight:700;color:var(--ink-soft);
+    padding-bottom:8px;border-bottom:2.5px dotted #C9BFA8;
+  }
+  .round-cards{display:flex;flex-direction:column;gap:14px;justify-content:space-around;flex:1;}
+
+  .match{
+    background:var(--card);border:2.5px solid var(--ink);border-radius:14px;
+    padding:10px;position:relative;
+    box-shadow:0 4px 0 rgba(22,35,59,.16), 0 7px 16px rgba(22,35,59,.08);
+  }
+  .match .m-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:6px;}
+  .m-id{font-family:"Fredoka",sans-serif;font-weight:700;font-size:11px;letter-spacing:.5px;color:var(--ink);
+    background:var(--card2);border:2px solid var(--ink);border-radius:6px;padding:1px 7px;}
+  .m-drop{font-family:"Nunito";font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.2px;}
+  .slot{
+    width:100%;display:flex;align-items:center;gap:8px;
+    padding:10px 11px;border-radius:9px;border:2px solid var(--ink);
+    background:#F4F0E6;color:var(--ink);cursor:pointer;text-align:left;
+    font-family:"Nunito",sans-serif;font-size:14px;font-weight:700;
+    transition:background .12s, transform .06s, box-shadow .06s;
+  }
+  .slot .sd{
+    font-family:"Fredoka",sans-serif;font-weight:700;font-size:11px;
+    color:#fff;background:var(--ink-soft);border-radius:5px;
+    min-width:19px;height:19px;display:grid;place-items:center;
+  }
+  .slot .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .slot .mark{font-size:14px;opacity:0;}
+  .slot:not(.locked){touch-action:manipulation;}
+  @media (hover:hover){
+    .slot:not(.locked):hover{background:#fff;transform:translateY(-1px);box-shadow:0 3px 0 rgba(22,35,59,.18);}
+  }
+  .vs{
+    font-family:"Fredoka",sans-serif;font-size:11px;letter-spacing:1px;font-weight:700;
+    color:var(--ink);text-transform:uppercase;margin:6px auto;
+    display:inline-flex;align-items:center;justify-content:center;gap:5px;
+    background:var(--sun);border:2px solid var(--ink);border-radius:999px;
+    padding:1px 10px;position:relative;left:50%;transform:translateX(-50%) rotate(-2deg);
+  }
+  .vs-icon{font-size:13px;letter-spacing:0;}
+  .slot.tbd{color:#A4AEBF;cursor:default;font-weight:700;font-style:italic;background:#F4F0E6;border-style:dashed;}
+  .slot.tbd .sd{background:#C3CAD6;}
+  .slot.bye{color:#9AA4B5;cursor:default;background:#EFEBE0;}
+  .slot.bye .sd{background:#C3CAD6;}
+  .slot.win{background:var(--grass);border-color:var(--ink);color:#fff;box-shadow:0 3px 0 var(--grass-deep);}
+  .slot.win .mark{opacity:1;color:#fff;}
+  .slot.win .sd{background:rgba(0,0,0,.22);color:#fff;}
+  .slot.lose{opacity:.55;}
+  .slot.lose .nm{text-decoration:line-through;text-decoration-color:var(--coral);text-decoration-thickness:2px;}
+
+  /* losers bracket winner = redemption coral */
+  .lb .slot.win{background:var(--coral);box-shadow:0 3px 0 var(--coral-deep);}
+
+  /* grand final */
+  .gf-wrap{display:flex;flex-wrap:wrap;gap:16px;align-items:stretch;}
+  .gf .match{border-color:var(--ink);background:linear-gradient(180deg,#fff,var(--card2));min-width:240px;}
+  .gf .slot.win{background:var(--grape);box-shadow:0 3px 0 var(--grape-deep);}
+  .reset-note{font-family:"Nunito";font-size:11.5px;font-weight:700;color:var(--grape-deep);margin-top:8px;line-height:1.4;}
+
+  .champ{
+    flex:1 1 260px;min-width:240px;border-radius:16px;
+    border:3px solid var(--ink);
+    background:
+      radial-gradient(130% 120% at 50% -10%, rgba(255,192,46,.55), rgba(255,192,46,0) 62%),
+      var(--card2);
+    box-shadow:0 5px 0 rgba(22,35,59,.2);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:8px;padding:24px;text-align:center;
+  }
+  .champ.empty{border-style:dashed;background:#FBF6EA;box-shadow:none;}
+  .champ .crown{font-size:34px;filter:drop-shadow(0 3px 0 rgba(22,35,59,.18));}
+  .champ .lbl{font-family:"Fredoka",sans-serif;letter-spacing:2px;font-size:12px;color:var(--sun-deep);font-weight:700;text-transform:uppercase;}
+  .champ .who{font-family:"Luckiest Guy",cursive;font-size:24px;color:var(--ink);line-height:1.2;letter-spacing:.5px;}
+  .champ.empty .who{font-family:"Fredoka",sans-serif;font-weight:600;color:var(--muted);font-size:15px;}
+
+  .legend{
+    display:flex;flex-wrap:wrap;gap:16px;margin-top:32px;padding-top:18px;
+    border-top:3px dotted #C9BFA8;font-family:"Nunito";font-size:12.5px;font-weight:700;color:var(--ink-soft);
+  }
+  .legend span{display:flex;align-items:center;gap:7px;}
+  .legend .sw{width:15px;height:15px;border-radius:5px;border:2px solid var(--ink);}
+  .footer-note{margin-top:18px;font-family:"Nunito";font-size:12.5px;font-weight:600;color:var(--muted);line-height:1.65;}
+
+  /* empty state */
+  .empty-state{
+    margin-top:40px;border:3px dashed var(--ink);border-radius:18px;
+    padding:52px 28px;text-align:center;background:#FBF6EA;
+  }
+  .empty-state .es-ic{font-size:52px;display:block;margin-bottom:18px;}
+  .empty-state h3{
+    font-family:"Luckiest Guy",cursive;color:var(--ink);font-size:24px;letter-spacing:1px;
+    margin:0 0 12px;line-height:1.2;
+  }
+  .empty-state p{font-family:"Nunito",sans-serif;font-weight:600;color:var(--muted);font-size:14.5px;margin:0;line-height:1.6;}
+
+  /* phantom (bye vs bye) */
+  .match.phantom{opacity:.4;}
+  .match.phantom .slot{cursor:default;}
+
+  /* ---------- Rotate-to-landscape fallback ---------- */
+  .rotate-prompt{display:none;}
+  @media (orientation:portrait) and (min-width:820px){
+    header,.controls,.stage{display:none;}
+    .rotate-prompt{
+      display:flex;position:fixed;inset:0;z-index:9999;
+      background:linear-gradient(180deg,var(--sky-top),var(--sky-bot));
+      align-items:center;justify-content:center;padding:40px;
+    }
+    .rotate-prompt .rp-card{text-align:center;max-width:440px;
+      background:var(--foam);border:3px solid var(--ink);border-radius:20px;padding:40px 30px;
+      box-shadow:0 6px 0 rgba(22,35,59,.22);}
+    .rotate-prompt .rp-ic{font-size:56px;display:block;margin-bottom:18px;animation:rot 1.8s ease-in-out infinite;}
+    .rotate-prompt h2{
+      font-family:"Luckiest Guy",cursive;color:var(--ink);font-size:26px;letter-spacing:1px;
+      margin:0 0 14px;line-height:1.3;
+    }
+    .rotate-prompt p{font-family:"Nunito",sans-serif;font-weight:600;color:var(--muted);font-size:14.5px;line-height:1.6;margin:0;}
+    @keyframes rot{0%,100%{transform:rotate(0deg);}50%{transform:rotate(90deg);}}
+  }
+
+  /* ---------- iPad landscape tuning ---------- */
+  @media (min-width:1000px) and (orientation:landscape){
+    .stage,.controls,.head-inner{max-width:1366px;}
+    .wordmark h1{font-size:46px;}
+    .round{min-width:248px;}
+    .rounds{gap:22px;}
+    .match{padding:13px;}
+    .m-id{font-size:12px;}
+    .slot{padding:14px 13px;font-size:16px;}
+    .slot .sd{font-size:12px;min-width:21px;height:21px;}
+    .vs{font-size:12px;}
+    .seed-field input{padding:15px 12px 15px 44px;font-size:16px;}
+    .seed-field.is-bye input{padding-right:60px;}
+    .seed-field .num{width:25px;height:25px;font-size:13px;}
+    .seed-field .byetag{font-size:11px;padding:3px 7px;}
+    .btn{padding:15px 17px;font-size:15px;}
+    .champ{padding:32px;}
+    .champ .who{font-size:28px;}
+    .roster-head{font-size:16px;}
+    .hint{font-size:13.5px;}
+  }
+</style>
+</head>
+<body>
+<div class="rotate-prompt">
+  <div class="rp-card">
+    <span class="rp-ic">📱</span>
+    <h2>TURN ME SIDEWAYS</h2>
+    <p>This bracket is built for landscape. Rotate the iPad to start racing.</p>
+  </div>
+</div>
+<header>
+  <div class="checker"></div>
+  <div class="head-inner">
+    <div class="wordmark">
+      <h1>BEERIO KART</h1>
+      <div class="sub"><span class="dot"></span> 🏎️ Double Elimination Night</div>
+    </div>
+    <div class="pint-wrap">
+      <div class="pint"><div class="beer" id="beer"></div><div class="foam" id="foam"></div></div>
+      <div class="pint-meta">
+        <div class="big" id="progNum">0 / 0</div>
+        <div class="lbl">🍄 Heats Run</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="controls">
+  <div class="roster">
+    <div class="roster-head">
+      <span>Racers</span>
+      <span class="count-ctl">
+        <button class="cbtn" id="cMinus" aria-label="Remove a racer">−</button>
+        <span class="cval" id="cVal">8</span>
+        <button class="cbtn" id="cPlus" aria-label="Add a racer">+</button>
+        <span class="count-cap" id="cCap">on the grid</span>
+      </span>
+    </div>
+    <div class="seeds" id="seeds"></div>
+    <div class="hint">Seed 1 is your strongest racer; the bracket auto-balances the matchups so the favorites only meet later. Fewer racers than a clean power of two? The empty slots become byes automatically. Not sure on seeds? Hit Shuffle to draw them at random.</div>
+  </div>
+  <div class="btns">
+    <button class="btn primary" id="shuffle"><span class="ic">❓</span> Shuffle seeds</button>
+    <button class="btn" id="reset"><span class="ic">↺</span> Reset results</button>
+    <button class="btn" id="clearAll"><span class="ic">🧹</span> Clear names</button>
+  </div>
+</div>
+
+<div class="stage" id="stage"></div>
+
+<script>
+"use strict";
+
+/* ----- sentinels ----- */
+const TBD = {tbd:true};
+const BYE = {bye:true, name:"BYE"};
+
+/* ----- tunables (change these to extend the bracket) ----- */
+const MIN_PLAYERS = 2;
+const MAX_PLAYERS = 16;
+const DEFAULT_COUNT = 8;
+
+/* ----- state ----- */
+let playerCount = DEFAULT_COUNT;
+let names = Array(playerCount).fill("");
+let results = {};        // matchId -> 'A' | 'B'
+let BR = null;           // current generated bracket {defs, byId, groups, k, S}
+
+/* =========================================================
+   BRACKET GENERATION  (modular: any count from MIN..MAX)
+   slot source types: {t:'seed',n} | {t:'win',m} | {t:'lose',m}
+   ========================================================= */
+function nextPow2(n){ let s=1; while(s<n) s*=2; return Math.max(2,s); }
+
+function byIdDropFix(defs, id, text){
+  const d = defs.find(x=>x.id===id);
+  if(d) d.drop = text;
+}
+
+/* standard balanced bracket seeding for a power-of-two field */
+function seedOrder(S){
+  let pls=[1,2];
+  const rounds=Math.log2(S);
+  for(let r=0;r<rounds-1;r++){
+    const len=pls.length*2+1;
+    const out=[];
+    for(const d of pls){ out.push(d); out.push(len-d); }
+    pls=out;
+  }
+  return pls;
+}
+
+function roundTitleW(r,k){
+  if(r===k) return "Winners Final";
+  if(r===k-1) return "Winners Semis";
+  return "Round "+r;
+}
+function roundTitleL(r,last){
+  if(r===last) return "Losers Final";
+  if(r===last-1) return "Losers Semis";
+  return "Losers Round "+r;
+}
+
+function buildBracket(N){
+  const S = nextPow2(N);
+  const k = Math.log2(S);
+  const defs = [];
+  const groups = [];
+  const wbRounds = {};            // r -> [ids]
+
+  // ---- Winners bracket ----
+  const order = seedOrder(S);
+  const lbRoundForWB = {};        // WB round r -> LB round its losers drop into
+  lbRoundForWB[1] = 1;
+  for(let r=2;r<=k;r++) lbRoundForWB[r] = 2*r-2;
+  const lastLB = 2*k-2;
+
+  // WR1
+  let ids1=[];
+  for(let i=0;i<S/2;i++){
+    const id=`W1M${i}`;
+    const drop = (lbRoundForWB[1]===lastLB) ? "L → Losers Final" : `L → Losers R${lbRoundForWB[1]}`;
+    defs.push({id,grp:"W1",bracket:"wb",drop,a:{t:"seed",n:order[2*i]},b:{t:"seed",n:order[2*i+1]}});
+    ids1.push(id);
+  }
+  wbRounds[1]=ids1;
+  groups.push({key:"W1",title:roundTitleW(1,k),bracket:"wb",ids:ids1});
+
+  for(let r=2;r<=k;r++){
+    const ids=[];
+    const cnt=S/Math.pow(2,r);
+    const prev=wbRounds[r-1];
+    const drop = (lbRoundForWB[r]===lastLB) ? "L → Losers Final" : `L → Losers R${lbRoundForWB[r]}`;
+    for(let i=0;i<cnt;i++){
+      const id=`W${r}M${i}`;
+      defs.push({id,grp:`W${r}`,bracket:"wb",drop,a:{t:"win",m:prev[2*i]},b:{t:"win",m:prev[2*i+1]}});
+      ids.push(id);
+    }
+    wbRounds[r]=ids;
+    groups.push({key:`W${r}`,title:roundTitleW(r,k),bracket:"wb",ids});
+  }
+
+  // ---- Losers bracket (only exists when there are 2+ winners-bracket rounds) ----
+  let lbFinalId = null;
+  if(k>=2){
+  let lr=1;
+  // LR1 (minor): pair up WR1 losers
+  {
+    const ids=[];
+    const cnt=S/4;
+    for(let i=0;i<cnt;i++){
+      const id=`L${lr}M${i}`;
+      defs.push({id,grp:`L${lr}`,bracket:"lb",a:{t:"lose",m:ids1[2*i]},b:{t:"lose",m:ids1[2*i+1]}});
+      ids.push(id);
+    }
+    groups.push({key:`L${lr}`,title:roundTitleL(lr,lastLB),bracket:"lb",ids});
+    var prevL=ids; lr++;
+  }
+  // alternate major / minor
+  for(let j=1;j<=k-1;j++){
+    // major: LB survivors vs WB round (j+1) losers, reversed to dodge rematches
+    const wbLosers=wbRounds[j+1];
+    const cnt=prevL.length;
+    const idsMaj=[];
+    for(let i=0;i<cnt;i++){
+      const id=`L${lr}M${i}`;
+      const wbIdx=cnt-1-i;
+      defs.push({id,grp:`L${lr}`,bracket:"lb",a:{t:"win",m:prevL[i]},b:{t:"lose",m:wbLosers[wbIdx]}});
+      idsMaj.push(id);
+    }
+    groups.push({key:`L${lr}`,title:roundTitleL(lr,lastLB),bracket:"lb",ids:idsMaj});
+    prevL=idsMaj; lr++;
+    // minor consolidation, unless this was the last major (LB final)
+    if(j<k-1){
+      const cnt2=prevL.length/2;
+      const idsMin=[];
+      for(let i=0;i<cnt2;i++){
+        const id=`L${lr}M${i}`;
+        defs.push({id,grp:`L${lr}`,bracket:"lb",a:{t:"win",m:prevL[2*i]},b:{t:"win",m:prevL[2*i+1]}});
+        idsMin.push(id);
+      }
+      groups.push({key:`L${lr}`,title:roundTitleL(lr,lastLB),bracket:"lb",ids:idsMin});
+      prevL=idsMin; lr++;
+    }
+  }
+  lbFinalId = prevL[0];
+  }
+
+  const wbFinalId = wbRounds[k][0];
+
+  // ---- Grand final (+ reset) ----
+  // With a losers bracket, the LB champ meets the WB champ. With only 2 racers
+  // there's no LB, so the WB-final loser gets their second life straight here.
+  const gfB = (k>=2) ? {t:"win",m:lbFinalId} : {t:"lose",m:wbFinalId};
+  if(k<2){ byIdDropFix(defs, wbFinalId, "L → Grand Final"); }
+  defs.push({id:"GF", grp:"GF",bracket:"gf",a:{t:"win",m:wbFinalId},b:gfB});
+  defs.push({id:"GF2",grp:"GF",bracket:"gf",a:{t:"win",m:wbFinalId},b:gfB});
+  groups.push({key:"GF",title:"Grand Final",bracket:"gf",ids:["GF","GF2"]});
+
+  const byId = Object.fromEntries(defs.map(d=>[d.id,d]));
+  return {defs,byId,groups,k,S};
+}
+
+/* =========================================================
+   COMPUTE  (resolve every match from names + recorded results)
+   ========================================================= */
+function compute(){
+  const players = names.map((n,i)=>({seed:i+1, name:(n&&n.trim())?n.trim():null}));
+  const M = {};
+  const resolve = (src)=>{
+    if(src.t==="seed"){
+      const p = players[src.n-1];
+      return (!p || p.name===null) ? BYE : p;
+    }
+    const m = M[src.m];
+    if(!m || !m.decided) return TBD;
+    return src.t==="win" ? m.winner : m.loser;
+  };
+  for(const def of BR.defs){
+    // GF2 only materializes if the lower-bracket side won game 1
+    if(def.id==="GF2"){
+      const gf = M["GF"];
+      const need = gf && gf.decided && gf.winSlot==="B";
+      if(!need){ M.GF2 = {a:TBD,b:TBD,winner:TBD,loser:TBD,decided:false,active:false,def}; continue; }
+    }
+    const a = resolve(def.a);
+    const b = resolve(def.b);
+    const aReal = a!==TBD && a!==BYE;
+    const bReal = b!==TBD && b!==BYE;
+    let winner=TBD, loser=TBD, decided=false, winSlot=null, auto=false, phantom=false;
+    if(a===BYE && bReal){ winner=b; loser=BYE; decided=true; winSlot="B"; auto=true; }
+    else if(b===BYE && aReal){ winner=a; loser=BYE; decided=true; winSlot="A"; auto=true; }
+    else if(a===BYE && b===BYE){ winner=BYE; loser=BYE; decided=true; winSlot="A"; auto=true; phantom=true; }
+    else if(aReal && bReal){
+      const r = results[def.id];
+      if(r==="A"){ winner=a; loser=b; decided=true; winSlot="A"; }
+      else if(r==="B"){ winner=b; loser=a; decided=true; winSlot="B"; }
+    }
+    M[def.id] = {a,b,winner,loser,decided,winSlot,auto,phantom,active:true,def};
+  }
+  return M;
+}
+
+/* ----- champion (never a bye/phantom) ----- */
+function getChampion(M){
+  const gf = M.GF, gf2 = M.GF2;
+  const isReal = (p)=> p && p!==TBD && p!==BYE;
+  if(gf && gf.decided && isReal(gf.winner)){
+    if(gf.winSlot==="A") return gf.winner;
+    if(gf2 && gf2.decided && isReal(gf2.winner)) return gf2.winner;
+  }
+  return null;
+}
+
+/* =========================================================
+   RENDERING
+   ========================================================= */
+function slotHTML(m, slot){
+  const comp = slot==="A" ? m.a : m.b;
+  let cls="slot", seed="", nm="", mark="";
+  if(comp===TBD){ cls+=" tbd"; nm="Waiting…"; seed="·"; }
+  else if(comp===BYE){ cls+=" bye"; nm="Bye"; seed="·"; }
+  else {
+    seed = comp.seed;
+    nm = comp.name;
+    if(m.decided && !m.phantom){
+      if(m.winSlot===slot){ cls+=" win"; mark="✔"; }
+      else { cls+=" lose"; }
+    }
+  }
+  const clickable = (comp!==TBD && comp!==BYE && !m.auto);
+  if(!clickable) cls+=" locked";
+  return `<button class="${cls}" data-m="${m.def.id}" data-slot="${slot}" ${clickable?"":"disabled"}>
+            <span class="sd">${seed}</span>
+            <span class="nm">${escapeHTML(nm)}</span>
+            <span class="mark">${mark}</span>
+          </button>`;
+}
+
+const ITEM_ICONS = ["🍄","🍌","⭐","🐢","💥","🔥","🪙"];
+function itemIconFor(id){
+  let h=0; for(let i=0;i<id.length;i++) h=(h*31+id.charCodeAt(i))>>>0;
+  return ITEM_ICONS[h % ITEM_ICONS.length];
+}
+
+function matchLabel(id){
+  // W2M0 -> W2·1, L3M1 -> L3·2, GF stays
+  const mm = id.match(/^([WL])(\d+)M(\d+)$/);
+  if(mm) return `${mm[1]}${mm[2]}·${parseInt(mm[3])+1}`;
+  return id;
+}
+
+function matchHTML(m){
+  const drop = m.def.drop ? `<span class="m-drop">${m.def.drop}</span>` : "";
+  const phantom = m.phantom ? " phantom" : "";
+  return `<div class="match${phantom}">
+    <div class="m-top"><span class="m-id">${matchLabel(m.def.id)}</span>${drop}</div>
+    ${slotHTML(m,"A")}
+    <div class="vs"><span class="vs-icon">${itemIconFor(m.def.id)}</span> vs</div>
+    ${slotHTML(m,"B")}
+  </div>`;
+}
+
+function roundHTML(group, M){
+  const cards = group.ids.map(id=>matchHTML(M[id])).join("");
+  return `<div class="round">
+    <div class="round-title">${group.title}</div>
+    <div class="round-cards">${cards}</div>
+  </div>`;
+}
+
+function emptyStateHTML(){
+  return `<div class="empty-state">
+    <span class="es-ic">🏁</span>
+    <h3>READY TO RACE?</h3>
+    <p>Set the number of racers above and drop in at least two names.<br>The bracket builds itself from there.</p>
+  </div>`;
+}
+
+function render(){
+  const M = compute();
+  const stage = document.getElementById("stage");
+
+  const realCount = names.filter(n=>n&&n.trim()).length;
+  if(realCount < 2){
+    stage.innerHTML = emptyStateHTML();
+    document.getElementById("beer").style.height = "0%";
+    document.getElementById("foam").style.bottom = "0%";
+    document.getElementById("progNum").textContent = "0 / 0";
+    return;
+  }
+
+  const wbGroups = BR.groups.filter(g=>g.bracket==="wb");
+  const lbGroups = BR.groups.filter(g=>g.bracket==="lb");
+
+  const wb = `<section class="bsec wb">
+    <div class="bsec-head"><span class="pip"></span><span class="tag">Winners Bracket</span><span class="rule"></span></div>
+    <div class="rounds">${wbGroups.map(g=>roundHTML(g,M)).join("")}</div>
+  </section>`;
+
+  const lb = lbGroups.length ? `<section class="bsec lb">
+    <div class="bsec-head"><span class="pip"></span><span class="tag">Losers Bracket</span><span class="rule"></span></div>
+    <div class="rounds">${lbGroups.map(g=>roundHTML(g,M)).join("")}</div>
+  </section>` : "";
+
+  // grand final
+  const champ = getChampion(M);
+  const gfMatches = M.GF2 && M.GF2.active ? ["GF","GF2"] : ["GF"];
+  const gfCards = gfMatches.map(id=>{
+    const label = id==="GF" ? "Game 1" : "Reset · Game 2";
+    return `<div class="match" style="min-width:240px"><div class="m-top"><span class="m-id">${label}</span></div>
+      ${slotHTML(M[id],"A")}<div class="vs"><span class="vs-icon">${itemIconFor(id)}</span> vs</div>${slotHTML(M[id],"B")}</div>`;
+  }).join("");
+  const resetNote = (M.GF.decided && M.GF.winSlot==="B" && !(M.GF2&&M.GF2.decided))
+      ? `<div class="reset-note">Lower-bracket racer forced a reset. Both have one loss now, so one more game decides it.</div>` : "";
+  const champBox = champ
+    ? `<div class="champ"><div class="crown">🍻</div><div class="lbl">Champion</div><div class="who">${escapeHTML(champ.name)}</div></div>`
+    : `<div class="champ empty"><div class="crown">🏁</div><div class="lbl">Champion</div><div class="who">To be crowned</div></div>`;
+
+  const gf = `<section class="bsec gf">
+    <div class="bsec-head"><span class="pip"></span><span class="tag">Grand Final</span><span class="rule"></span></div>
+    <div class="gf-wrap"><div>${gfCards}${resetNote}</div>${champBox}</div>
+  </section>`;
+
+  const legend = `<div class="legend">
+    <span><span class="sw" style="background:rgba(55,200,169,.4);border-color:var(--win)"></span> 🍄 Winners bracket</span>
+    <span><span class="sw" style="background:rgba(240,88,75,.4);border-color:var(--lose)"></span> 🐢 Losers bracket (one life left)</span>
+    <span><span class="sw" style="background:rgba(255,211,78,.4);border-color:var(--gold)"></span> ⭐ Grand final</span>
+    <span>👉 Tap a racer to mark them the heat winner. Tap again to undo.</span>
+  </div>`;
+
+  const note = `<div class="footer-note">🍌 House rule reminder: finish your drink before crossing the line, no power-sliding past last call. First loss drops you to the losers bracket; a second loss and you're toast, sorry Bowser. The winners-bracket champ starts the grand final one game up, like grabbing a Star on the final lap.</div>`;
+
+  stage.innerHTML = wb + lb + gf + legend + note;
+
+  // progress meter
+  let done=0, playable=0;
+  for(const id in M){
+    const m=M[id];
+    if(!m.active) continue;
+    const aReal = m.a!==TBD && m.a!==BYE, bReal = m.b!==TBD && m.b!==BYE;
+    if(aReal && bReal && !m.auto){ playable++; if(m.decided) done++; }
+  }
+  const pct = playable? Math.round(done/playable*100) : 0;
+  document.getElementById("beer").style.height = pct+"%";
+  document.getElementById("foam").style.bottom = pct+"%";
+  document.getElementById("progNum").textContent = done+" / "+playable;
+
+  // wire slot clicks
+  stage.querySelectorAll(".slot[data-m]").forEach(btn=>{
+    if(btn.disabled) return;
+    btn.addEventListener("click", ()=>{
+      const id = btn.dataset.m, slot = btn.dataset.slot;
+      if(results[id]===slot) delete results[id];
+      else results[id]=slot;
+      pruneDownstream();
+      render();
+    });
+  });
+}
+
+/* drop stale results whose competitors are no longer both real */
+function pruneDownstream(){
+  let changed=true;
+  while(changed){
+    changed=false;
+    const M = compute();
+    for(const id in results){
+      const m = M[id];
+      if(!m){ delete results[id]; changed=true; continue; }
+      const aReal = m.a!==TBD && m.a!==BYE, bReal = m.b!==TBD && m.b!==BYE;
+      if(!(aReal&&bReal)){ delete results[id]; changed=true; }
+    }
+  }
+}
+
+function escapeHTML(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+
+/* =========================================================
+   ROSTER + COUNT CONTROLS
+   ========================================================= */
+function buildSeeds(){
+  const wrap = document.getElementById("seeds");
+  wrap.innerHTML = names.map((n,i)=>`
+    <div class="seed-field ${n.trim()?'':'is-bye'}" data-field="${i}">
+      <span class="num">${i+1}</span>
+      <input type="text" data-i="${i}" value="${escapeHTML(n)}" placeholder="Racer ${i+1}" maxlength="18" autocomplete="off" />
+      <span class="byetag">BYE</span>
+    </div>`).join("");
+  wrap.querySelectorAll("input").forEach(inp=>{
+    inp.addEventListener("input", ()=>{
+      names[+inp.dataset.i] = inp.value;
+      const field = wrap.querySelector(`.seed-field[data-field="${inp.dataset.i}"]`);
+      field.classList.toggle("is-bye", !inp.value.trim());
+      render();
+    });
+  });
+}
+
+function syncCountUI(){
+  document.getElementById("cVal").textContent = playerCount;
+  document.getElementById("cMinus").disabled = playerCount<=MIN_PLAYERS;
+  document.getElementById("cPlus").disabled = playerCount>=MAX_PLAYERS;
+  const S = nextPow2(playerCount);
+  const byes = S - playerCount;
+  document.getElementById("cCap").textContent =
+    byes>0 ? `${byes} bye${byes>1?"s":""} → ${S}-slot bracket` : `clean ${S}-slot bracket`;
+}
+
+function setCount(n){
+  const next = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, n));
+  if(next===playerCount) return;
+  playerCount = next;
+  // resize names, preserving what fits
+  if(names.length < playerCount){
+    while(names.length < playerCount) names.push("");
+  } else {
+    names = names.slice(0, playerCount);
+  }
+  results = {};                 // structure changed; clear recorded heats
+  BR = buildBracket(playerCount);
+  buildSeeds();
+  syncCountUI();
+  render();
+}
+
+/* ----- buttons ----- */
+document.getElementById("cMinus").addEventListener("click", ()=>setCount(playerCount-1));
+document.getElementById("cPlus").addEventListener("click", ()=>setCount(playerCount+1));
+
+document.getElementById("shuffle").addEventListener("click", ()=>{
+  const real = names.map(n=>n.trim()).filter(Boolean);
+  for(let i=real.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[real[i],real[j]]=[real[j],real[i]];}
+  names = names.map((_,i)=>real[i]||"");
+  results = {};
+  buildSeeds(); render();
+});
+document.getElementById("reset").addEventListener("click", ()=>{
+  results={}; render();
+});
+document.getElementById("clearAll").addEventListener("click", ()=>{
+  names = Array(playerCount).fill("");
+  results={}; buildSeeds(); render();
+});
+
+/* ----- boot ----- */
+BR = buildBracket(playerCount);
+buildSeeds();
+syncCountUI();
+render();
+</script>
+</body>
+</html>
