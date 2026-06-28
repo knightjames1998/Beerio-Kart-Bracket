@@ -323,6 +323,100 @@ function BracketSection({groups,M,onSlotClick,tagColor,tagText,pipColor,slotHFor
   );
 }
 
+// ─── Beer Mug SVG ─────────────────────────────────────────────────────────────
+
+function BeerMug({pct}:{pct:number}){
+  // inner fill area: y runs from TOP=8 to BOT=62, height=54
+  const TOP=8,BOT=62,MUG_H=BOT-TOP;
+  const fillH=Math.max(0,(pct/100)*MUG_H);
+  const fillY=BOT-fillH;
+  const show=fillH>0.5;
+  const FOAM=9; // foam height above liquid surface
+
+  return(
+    <svg viewBox="0 0 56 72" width="44" height="58" style={{flexShrink:0,overflow:"visible"}}>
+      <defs>
+        <linearGradient id="beerGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#FFD055"/>
+          <stop offset="60%" stopColor="#FFA820"/>
+          <stop offset="100%" stopColor="#D4700A"/>
+        </linearGradient>
+        {/* clip to mug body */}
+        <clipPath id="mugClip">
+          <polygon points="5,7 49,7 44,64 10,64"/>
+        </clipPath>
+        {/* clip to beer fill area only (for bubbles) */}
+        <clipPath id="beerClip">
+          <rect x="0" y={fillY} width="56" height={fillH+2}/>
+        </clipPath>
+      </defs>
+
+      {/* Glass body background */}
+      <polygon points="5,7 49,7 44,64 10,64" fill="rgba(200,230,255,0.18)"/>
+
+      {/* Beer fill */}
+      {show&&(
+        <rect x="0" width="56" clipPath="url(#mugClip)"
+          fill="url(#beerGrad)"
+          style={{
+            y:`${fillY}px`,
+            height:`${fillH+8}px`,
+            transition:"y .55s ease, height .55s ease",
+          } as React.CSSProperties}
+        />
+      )}
+
+      {/* Foam layer + animated bumps */}
+      {show&&(
+        <g clipPath="url(#mugClip)"
+          style={{
+            transform:`translateY(${fillY-FOAM}px)`,
+            transition:"transform .55s ease",
+            animation:"foamOscillate 3.2s ease-in-out infinite",
+            transformOrigin:"27px 0px",
+          }}>
+          {/* foam body rect */}
+          <rect x="0" y="0" width="56" height={FOAM+4} fill="white" opacity="0.96"/>
+          {/* bumpy top edge — row of overlapping circles */}
+          {[6,11,16,21,26,31,36,41,46].map((cx,i)=>(
+            <circle key={i} cx={cx} cy={1} r={5} fill="white" opacity="0.95"/>
+          ))}
+          {/* second smaller row for depth */}
+          {[3,9,15,21,27,33,39,45].map((cx,i)=>(
+            <circle key={i} cx={cx} cy={-2} r={3.2} fill="white" opacity="0.7"/>
+          ))}
+        </g>
+      )}
+
+      {/* Rising bubbles — clipped to beer fill */}
+      {show&&fillH>12&&(
+        <g clipPath="url(#mugClip)">
+          <circle cx="21" cy={BOT-6} r="2.2" fill="rgba(255,255,255,0.55)"
+            style={{animation:"beerBubble1 2.4s ease-in infinite"}}/>
+          <circle cx="31" cy={BOT-3} r="1.5" fill="rgba(255,255,255,0.45)"
+            style={{animation:"beerBubble2 3s ease-in .9s infinite"}}/>
+          <circle cx="26" cy={BOT-10} r="1.8" fill="rgba(255,255,255,0.4)"
+            style={{animation:"beerBubble3 2.7s ease-in 1.7s infinite"}}/>
+        </g>
+      )}
+
+      {/* Mug outline */}
+      <polygon points="5,7 49,7 44,64 10,64"
+        fill="none" stroke="#16233B" strokeWidth="2.5" strokeLinejoin="round"/>
+
+      {/* Handle */}
+      <path d="M 49 22 C 62 22 62 52 49 52"
+        fill="none" stroke="#16233B" strokeWidth="3" strokeLinecap="round"/>
+      {/* Handle inner line for thickness */}
+      <path d="M 49 27 C 57 27 57 47 49 47"
+        fill="rgba(255,255,255,0.4)" stroke="#16233B" strokeWidth="1.5" strokeLinecap="round"/>
+
+      {/* Rim line */}
+      <line x1="5" y1="7" x2="49" y2="7" stroke="#16233B" strokeWidth="2.5" strokeLinecap="round"/>
+    </svg>
+  );
+}
+
 // ─── Rules Modal ──────────────────────────────────────────────────────────────
 
 const RULES = [
@@ -517,11 +611,7 @@ export default function App(){
               ℹ️
             </button>
           <div className="flex items-center gap-3.5 bg-[var(--foam)] border-2 border-[var(--ink)] rounded-[11px] px-3 py-2 shadow-[0_3px_0_rgba(22,35,59,.18)]">
-            <div className="relative w-10 h-[54px] border-2 border-[var(--ink)] rounded-[6px_6px_9px_9px] bg-white/60 overflow-hidden flex-shrink-0">
-              <div className="absolute left-0 right-0 bottom-0 bg-gradient-to-b from-[var(--sun)] to-[var(--sun-deep)] transition-all duration-500" style={{height:pct+"%"}}/>
-              <div className="absolute left-0 right-0 h-[7px] bg-[var(--foam)] rounded-[50%_50%_0_0/100%_100%_0_0] transition-all duration-500" style={{bottom:pct+"%"}}/>
-              <div className="absolute -right-[11px] top-[9px] w-[11px] h-[24px] border-2 border-[var(--ink)] border-l-0 rounded-[0_8px_8px_0]"/>
-            </div>
+            <BeerMug pct={pct}/>
             <div className="font-[Fredoka]">
               <div className="text-[19px] font-bold text-[var(--ink)] leading-none">{done} / {playable}</div>
               <div className="text-[10px] text-[var(--ink-soft)] tracking-widest font-semibold mt-0.5">🍄 Heats Run</div>
