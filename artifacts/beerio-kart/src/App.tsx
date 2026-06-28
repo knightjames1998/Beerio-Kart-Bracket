@@ -323,6 +323,91 @@ function BracketSection({groups,M,onSlotClick,tagColor,tagText,pipColor,slotHFor
   );
 }
 
+// ─── Rules Modal ──────────────────────────────────────────────────────────────
+
+const RULES = [
+  {
+    icon: "🚗",
+    title: "No Drinking & Driving",
+    body: "You CANNOT drink while actively racing. Seriously — put the can down, both hands on the wheel. You must finish your drink before or after the race, never during.",
+  },
+  {
+    icon: "🍺",
+    title: "Finish Before You Cross",
+    body: "Your drink must be completely finished before you cross the finish line. If you cross with liquid still in the cup, your finish doesn't count — pull over and chug.",
+  },
+  {
+    icon: "🏁",
+    title: "Double Elimination",
+    body: "Everyone gets a second chance. Your first loss drops you to the Losers Bracket. A second loss and you're done. The Losers Bracket champion earns their way back to the Grand Final.",
+  },
+  {
+    icon: "⭐",
+    title: "Grand Final — WB Advantage",
+    body: "The Winners Bracket champion enters the Grand Final with a one-game lead. If they win Game 1, tournament over. If the Losers champ wins Game 1, scores reset to 0-0 and Game 2 decides everything.",
+  },
+  {
+    icon: "🎮",
+    title: "Track Selection",
+    body: "Agree on tracks before each round or use random — no take-backs after the race starts. Recommend sticking to the same cup/track pool for the whole tournament.",
+  },
+  {
+    icon: "🕐",
+    title: "Timing",
+    body: "Results are final the moment you cross the line with an empty cup. No mid-race disputes — settle them after the race is over.",
+  },
+  {
+    icon: "🏠",
+    title: "House Rules",
+    body: "Add your own before the tournament starts. Common ones: item usage rules, rubber cup holders, the infamous Blue Shell fine (one extra sip). Whatever you agree on before race 1 is law.",
+  },
+];
+
+function RulesModal({onClose}:{onClose:()=>void}){
+  return(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{background:"rgba(22,35,59,0.6)",backdropFilter:"blur(4px)"}}
+      onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div className="relative w-full max-w-lg max-h-[85vh] flex flex-col bg-[var(--foam)] border-[3px] border-[var(--ink)] rounded-[18px] shadow-[0_8px_0_rgba(22,35,59,.3)]"
+        style={{overflowY:"auto"}}>
+        {/* Header */}
+        <div className="sticky top-0 z-10 bg-[var(--sun)] border-b-[3px] border-[var(--ink)] px-5 py-3 flex items-center justify-between rounded-t-[15px]">
+          <div>
+            <h2 className="font-[Luckiest_Guy,cursive] text-[22px] text-[var(--ink)] leading-none tracking-wider m-0"
+              style={{textShadow:"2px 2px 0 rgba(22,35,59,.15)"}}>
+              🍺 BEERIO KART RULES
+            </h2>
+            <p className="font-[Fredoka] font-semibold text-[11px] text-[var(--ink)] opacity-70 mt-0.5 m-0 tracking-wide">
+              Read before you race. Seriously.
+            </p>
+          </div>
+          <button onClick={onClose}
+            className="w-8 h-8 rounded-[8px] border-2 border-[var(--ink)] bg-white text-[var(--ink)] font-bold text-lg grid place-items-center shadow-[0_2px_0_rgba(22,35,59,.22)] hover:bg-[#F5EFE0] active:translate-y-px transition-all cursor-pointer">
+            ✕
+          </button>
+        </div>
+        {/* Rules list */}
+        <div className="px-5 py-4 flex flex-col gap-3">
+          {RULES.map((r,i)=>(
+            <div key={i} className="flex gap-3 bg-white border-2 border-[var(--ink)] rounded-[12px] p-3 shadow-[0_2px_0_rgba(22,35,59,.1)]">
+              <span className="text-2xl flex-shrink-0 mt-0.5">{r.icon}</span>
+              <div>
+                <div className="font-[Fredoka] font-bold text-[14px] text-[var(--ink)] leading-tight mb-1">{r.title}</div>
+                <p className="font-[Nunito] text-[12.5px] font-semibold text-[var(--ink-soft)] leading-relaxed m-0">{r.body}</p>
+              </div>
+            </div>
+          ))}
+          <div className="mt-1 mb-1 bg-[#FFF1D8] border-2 border-[var(--sun-deep)] rounded-[12px] px-4 py-3 text-center">
+            <p className="font-[Fredoka] font-bold text-[13px] text-[var(--ink)] m-0">
+              🏎️ Most importantly: drink responsibly, have a designated driver, and don't actually drink and drive. Ever.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── App ─────────────────────────────────────────────────────────────────────
 
 export default function App(){
@@ -330,6 +415,7 @@ export default function App(){
   const [names,setNames]=useState<string[]>(Array(DEFAULT_COUNT).fill(""));
   const [results,setResults]=useState<Record<string,"A"|"B">>({});
   const [BR,setBR]=useState<Bracket>(()=>buildBracket(DEFAULT_COUNT));
+  const [rulesOpen,setRulesOpen]=useState(false);
 
   const handleSetCount=useCallback((n:number)=>{
     const next=Math.max(MIN_PLAYERS,Math.min(MAX_PLAYERS,n));
@@ -402,6 +488,7 @@ export default function App(){
 
   return(
     <div className="min-h-screen">
+      {rulesOpen&&<RulesModal onClose={()=>setRulesOpen(false)}/>}
       {/* Header */}
       <header className="relative border-b-[3px] border-[var(--ink)] overflow-hidden" style={{
         background:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 180' preserveAspectRatio='none'%3E%3Cg fill='%23FFFFFF'%3E%3Cellipse cx='170' cy='44' rx='72' ry='26'/%3E%3Cellipse cx='232' cy='36' rx='46' ry='22'/%3E%3Cellipse cx='1080' cy='50' rx='88' ry='32'/%3E%3Cellipse cx='1160' cy='38' rx='58' ry='24'/%3E%3C/g%3E%3C/svg%3E") no-repeat top/100%,linear-gradient(180deg,var(--sky-top) 0%,var(--sky-bot) 78%)`}}>
@@ -417,6 +504,12 @@ export default function App(){
               🏎️ Double Elimination Night
             </div>
           </div>
+          <div className="flex items-center gap-3">
+            <button onClick={()=>setRulesOpen(true)}
+              title="Rules"
+              className="w-9 h-9 rounded-[10px] border-2 border-[var(--ink)] bg-[var(--foam)] text-[var(--ink)] font-[Fredoka] font-bold text-[15px] grid place-items-center shadow-[0_3px_0_rgba(22,35,59,.22)] hover:bg-white active:translate-y-px transition-all cursor-pointer flex-shrink-0">
+              ℹ️
+            </button>
           <div className="flex items-center gap-3.5 bg-[var(--foam)] border-2 border-[var(--ink)] rounded-[11px] px-3 py-2 shadow-[0_3px_0_rgba(22,35,59,.18)]">
             <div className="relative w-10 h-[54px] border-2 border-[var(--ink)] rounded-[6px_6px_9px_9px] bg-white/60 overflow-hidden flex-shrink-0">
               <div className="absolute left-0 right-0 bottom-0 bg-gradient-to-b from-[var(--sun)] to-[var(--sun-deep)] transition-all duration-500" style={{height:pct+"%"}}/>
@@ -427,6 +520,7 @@ export default function App(){
               <div className="text-[19px] font-bold text-[var(--ink)] leading-none">{done} / {playable}</div>
               <div className="text-[10px] text-[var(--ink-soft)] tracking-widest font-semibold mt-0.5">🍄 Heats Run</div>
             </div>
+          </div>
           </div>
         </div>
       </header>
@@ -505,13 +599,33 @@ export default function App(){
                   ))}
                   {showReset&&<p className="font-[Nunito] text-[10.5px] font-bold text-[var(--grape-deep)] leading-snug">Lower-bracket forced a reset — one more game decides it.</p>}
                 </div>
-                <div className={`flex-1 min-w-[180px] max-w-[260px] rounded-xl border-2 border-[var(--ink)] flex flex-col items-center justify-center gap-1.5 px-5 py-4 text-center shadow-[0_3px_0_rgba(22,35,59,.16)] ${!champ?"border-dashed bg-[#FBF6EA]":""}`}
-                  style={champ?{background:"radial-gradient(130% 120% at 50% -10%,rgba(255,192,46,.55),rgba(255,192,46,0) 62%),var(--card2)"}:{}}>
-                  <span className="text-3xl">{champ?"🍻":"🏁"}</span>
-                  <span className="font-[Fredoka] tracking-[2px] text-[9.5px] text-[var(--sun-deep)] font-bold uppercase">Champion</span>
-                  {champ?<span className="font-[Luckiest_Guy,cursive] text-[19px] text-[var(--ink)] leading-tight tracking-wide">{champ.name}</span>
-                   :<span className="font-[Fredoka] font-semibold text-[var(--muted)] text-[13px]">To be crowned</span>}
-                </div>
+                {champ ? (
+                  /* ── Big winner card ── */
+                  <div className="flex-1 min-w-[220px] rounded-2xl border-[3px] border-[var(--ink)] flex flex-col items-center justify-center gap-3 px-8 py-8 text-center"
+                    style={{
+                      background:"radial-gradient(130% 130% at 50% -10%,rgba(255,192,46,.7),rgba(255,192,46,0) 62%),var(--card2)",
+                      boxShadow:"0 6px 0 rgba(22,35,59,.22), 0 12px 32px rgba(22,35,59,.12)",
+                      animation:"champPop .4s cubic-bezier(.34,1.56,.64,1) both",
+                    }}>
+                    <span style={{fontSize:52,lineHeight:1,filter:"drop-shadow(0 4px 0 rgba(22,35,59,.18))",animation:"champBounce 1.8s ease-in-out infinite"}}>🍻</span>
+                    <div>
+                      <div className="font-[Fredoka] tracking-[3px] text-[11px] text-[var(--sun-deep)] font-bold uppercase mb-1">🏆 Champion 🏆</div>
+                      <div className="font-[Luckiest_Guy,cursive] text-[clamp(22px,4vw,34px)] text-[var(--ink)] leading-tight tracking-wide" style={{textShadow:"2px 2px 0 rgba(22,35,59,.1)"}}>
+                        {champ.name}
+                      </div>
+                    </div>
+                    <div className="font-[Fredoka] font-semibold text-[13px] text-[var(--ink-soft)]">
+                      Drinks are on the winner 🍺
+                    </div>
+                  </div>
+                ) : (
+                  /* ── Waiting card ── */
+                  <div className="flex-1 min-w-[180px] max-w-[240px] rounded-xl border-2 border-dashed border-[var(--ink)] flex flex-col items-center justify-center gap-1.5 px-5 py-4 text-center bg-[#FBF6EA]">
+                    <span className="text-3xl">🏁</span>
+                    <span className="font-[Fredoka] tracking-[2px] text-[9.5px] text-[var(--sun-deep)] font-bold uppercase">Champion</span>
+                    <span className="font-[Fredoka] font-semibold text-[var(--muted)] text-[13px]">To be crowned</span>
+                  </div>
+                )}
               </div>
             </section>
 
