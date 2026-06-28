@@ -328,13 +328,13 @@ function BracketSection({groups,M,onSlotClick,tagColor,tagText,pipColor,slotHFor
 const RULES = [
   {
     icon: "🚗",
-    title: "No Drinking & Driving",
-    body: "You CANNOT drink while actively racing. Seriously — put the can down, both hands on the wheel. You must finish your drink before or after the race, never during.",
+    title: "No Drinking While Moving",
+    body: "You can drink during the race — but only while your kart is stopped. You cannot drink and drive at the same time. Pull over, take your sips, then get back in it.",
   },
   {
     icon: "🍺",
     title: "Finish Before You Cross",
-    body: "Your drink must be completely finished before you cross the finish line. If you cross with liquid still in the cup, your finish doesn't count — pull over and chug.",
+    body: "Your drink must be completely finished before you cross the finish line. If you cross with liquid still in the cup, your finish doesn't count — pull back and chug.",
   },
   {
     icon: "🏁",
@@ -397,11 +397,6 @@ function RulesModal({onClose}:{onClose:()=>void}){
               </div>
             </div>
           ))}
-          <div className="mt-1 mb-1 bg-[#FFF1D8] border-2 border-[var(--sun-deep)] rounded-[12px] px-4 py-3 text-center">
-            <p className="font-[Fredoka] font-bold text-[13px] text-[var(--ink)] m-0">
-              🏎️ Most importantly: drink responsibly, have a designated driver, and don't actually drink and drive. Ever.
-            </p>
-          </div>
         </div>
       </div>
     </div>
@@ -474,6 +469,17 @@ export default function App(){
   const lbGroups=BR.groups.filter(g=>g.bracket==="lb");
   const gfMatches=M["GF2"]&&M["GF2"].active?["GF","GF2"]:["GF"];
   const showReset=M["GF"]?.decided&&M["GF"]?.winSlot==="B"&&!(M["GF2"]?.decided);
+
+  // Grand Final score — WB champ always starts 1-0
+  const gfMatch=M["GF"];
+  const gfA=gfMatch?.a!==TBD&&gfMatch?.a!==BYE&&gfMatch?.a?gfMatch.a:null;
+  const gfB=gfMatch?.b!==TBD&&gfMatch?.b!==BYE&&gfMatch?.b?gfMatch.b:null;
+  const gfBothKnown=!!(gfA&&gfB);
+  let gfScoreA=1,gfScoreB=0; // WB starts 1-0
+  if(gfMatch?.decided){
+    if(gfMatch.winSlot==="A")gfScoreA++;
+    else gfScoreB++;
+  }
 
   // WB connector rules:
   // All WB rounds except last have right connectors with pairing
@@ -592,6 +598,36 @@ export default function App(){
                   style={{background:"var(--grape)",border:"2px solid var(--ink)",transform:"rotate(-1deg)"}}>Grand Final</span>
                 <span className="h-[2px] bg-[var(--ink)] opacity-15 flex-1 rounded"/>
               </div>
+
+              {/* Score strip — only when both finalists are known */}
+              {gfBothKnown&&!champ&&(
+                <div className="mb-3 inline-flex items-center gap-0 border-2 border-[var(--ink)] rounded-[10px] overflow-hidden shadow-[0_2px_0_rgba(22,35,59,.18)]">
+                  {/* WB side */}
+                  <div className={`flex items-center gap-2 px-3 py-1.5 ${gfScoreA>gfScoreB?"bg-[var(--sun)]":"bg-white"}`}>
+                    <span className="font-[Fredoka] font-bold text-[12px] text-[var(--ink)] max-w-[110px] truncate">{gfA}</span>
+                    <span className="font-[Luckiest_Guy,cursive] text-[20px] text-[var(--ink)] leading-none">{gfScoreA}</span>
+                  </div>
+                  {/* Divider */}
+                  <div className="w-px self-stretch bg-[var(--ink)]"/>
+                  {/* Center label */}
+                  <div className="px-2 py-1.5 bg-[var(--grape)] flex flex-col items-center gap-0">
+                    <span className="font-[Fredoka] font-bold text-[8px] text-white tracking-widest uppercase leading-none">Best of</span>
+                    <span className="font-[Luckiest_Guy,cursive] text-[13px] text-white leading-none">3</span>
+                  </div>
+                  {/* Divider */}
+                  <div className="w-px self-stretch bg-[var(--ink)]"/>
+                  {/* LB side */}
+                  <div className={`flex items-center gap-2 px-3 py-1.5 ${gfScoreB>gfScoreA?"bg-[var(--sun)]":"bg-white"}`}>
+                    <span className="font-[Luckiest_Guy,cursive] text-[20px] text-[var(--ink)] leading-none">{gfScoreB}</span>
+                    <span className="font-[Fredoka] font-bold text-[12px] text-[var(--ink)] max-w-[110px] truncate">{gfB}</span>
+                  </div>
+                  {/* WB badge */}
+                  <div className="w-px self-stretch bg-[var(--ink)]"/>
+                  <div className="px-2 py-1.5 bg-[#F0F8FF]">
+                    <span className="font-[Fredoka] font-bold text-[8.5px] text-[var(--ink)] tracking-wide leading-tight whitespace-nowrap">WB<br/>+1</span>
+                  </div>
+                </div>
+              )}
               <div className="flex flex-wrap gap-4 items-center">
                 <div className="flex flex-col gap-2" style={{width:CARD_W}}>
                   {gfMatches.map(id=>(
