@@ -1,4 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
+import { QRCodeSVG } from "qrcode.react";
+import { compressToEncodedURIComponent, decompressFromEncodedURIComponent } from "lz-string";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,6 +30,16 @@ interface MatchResult {
   phantom: boolean; active: boolean; def: MatchDef;
 }
 
+// Race wins needed to take a match: 1 = single race, 2 = Best of 3, 3 = Best of 5
+type SeriesLen = 1 | 2 | 3;
+type HeatSize  = 2 | 4;
+interface Format { series: SeriesLen; heatSize: HeatSize; }
+type Series = Record<string, { a: number; b: number }>;
+interface SavedState {
+  playerCount: number; names: string[];
+  results: Record<string, "A" | "B">; series: Series; format: Format;
+}
+
 // ─── Layout constants ─────────────────────────────────────────────────────────
 const CARD_H    = 98;   // px — height of one compact match card
 const CARD_W    = 186;  // px — width of match card column
@@ -35,14 +47,17 @@ const SLOT_BASE = 106;  // px — base slot height = CARD_H + inter-card gap (8 
 const CONN_W    = 14;   // px — width of each connector arm
 const LINE_CLR  = "rgba(22,35,59,0.2)";
 
-// WB round r (1-indexed):  slotH = SLOT_BASE * 2^(r-1)
-// LB group i (0-indexed):  slotH = SLOT_BASE * 2^floor(i/2)
 const wbSlotH = (r: number) => SLOT_BASE * Math.pow(2, r - 1);
 const lbSlotH = (i: number) => SLOT_BASE * Math.pow(2, Math.floor(i / 2));
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const MIN_PLAYERS = 2, MAX_PLAYERS = 16, DEFAULT_COUNT = 8;
 const ITEM_ICONS  = ["🍄","🍌","⭐","🐢","💥","🔥","🪙"];
+const STORAGE_KEY = "beerio-kart-state-v1";
+const SESSION_KEY = "beerio-kart-session-v1";
+const API = "/api";
+const DEFAULT_FORMAT: Format = { series: 1, heatSize: 2 };
+type LiveStatus = "idle" | "connecting" | "live" | "error";
 
 // ─── Bracket engine ───────────────────────────────────────────────────────────
 function nextPow2(n: number) { let s=1; while(s<n) s*=2; return Math.max(2,s); }
@@ -170,21 +185,45 @@ function getChampion(M:Record<string,MatchResult>):Player|null{
 function itemIconFor(id:string){let h=0;for(let i=0;i<id.length;i++)h=(h*31+id.charCodeAt(i))>>>0;return ITEM_ICONS[h%ITEM_ICONS.length];}
 function matchLabel(id:string){const m=id.match(/^([WL])(\d+)M(\d+)$/);if(m)return`${m[1]}${m[2]}·${+m[3]+1}`;return id;}
 
+// Race wins needed for a given match under the chosen format (GF keeps its own mechanic = 1 tap)
+function targetFor(def:MatchDef, fmt:Format){ return def.bracket==="gf" ? 1 : fmt.series; }
+
+// Drop results / series that are no longer valid after a change
+function pruneState(BR:Bracket,names:string[],results:Record<string,"A"|"B">,series:Series){
+  let r={...results}; const s:Series={...series}; let changed=true;
+  while(changed){
+    changed=false; const M=compute(BR,names,r);
+    for(const id in r){
+      const m=M[id];
+      if(!m||!(m.a!==TBD&&m.a!==BYE&&m.b!==TBD&&m.b!==BYE)){delete r[id];changed=true;}
+    }
+  }
+  const M=compute(BR,names,r);
+  for(const id in s){
+    const m=M[id];
+    if(!m||m.auto||!(m.a!==TBD&&m.a!==BYE&&m.b!==TBD&&m.b!==BYE)){delete s[id];}
+  }
+  return {results:r,series:s};
+}
+
 // ─── Compact Match Card ───────────────────────────────────────────────────────
 
-function SlotRow({m,slot,onClick}:{m:MatchResult;slot:"A"|"B";onClick:(id:string,s:"A"|"B")=>void}){
+function SlotRow({m,slot,onClick,wins,target,readOnly}:{
+  m:MatchResult;slot:"A"|"B";onClick:(id:string,s:"A"|"B")=>void;
+  wins:number;target:number;readOnly:boolean;
+}){
   const comp=slot==="A"?m.a:m.b;
   const isTbd=comp===TBD,isBye=comp===BYE,isPlayer=!isTbd&&!isBye;
   const player=isPlayer?(comp as Player):null;
   const isWin=m.decided&&!m.phantom&&m.winSlot===slot;
   const isLose=m.decided&&!m.phantom&&m.winSlot!==slot&&isPlayer;
-  const clickable=isPlayer&&!m.auto;
+  const clickable=isPlayer&&!m.auto&&!readOnly;
   const lb=m.def.bracket==="lb",gf=m.def.bracket==="gf";
   let bg="#EDE8DC";
   if(isWin)bg=lb?"var(--coral)":gf?"var(--grape)":"var(--grass)";
   return(
     <button disabled={!clickable} onClick={()=>clickable&&onClick(m.def.id,slot)}
-      style={{background:bg}}
+      style={{background:bg,touchAction:"manipulation"}}
       className={[
         "w-full flex items-center gap-1.5 px-2 py-[5px] rounded-[6px] border border-[var(--ink)]",
         "font-[Nunito] text-[11.5px] font-bold text-left transition-all",
@@ -201,44 +240,62 @@ function SlotRow({m,slot,onClick}:{m:MatchResult;slot:"A"|"B";onClick:(id:string
       <span className={["flex-1 overflow-hidden text-ellipsis whitespace-nowrap leading-none",isLose?"line-through decoration-[var(--coral)] decoration-[1.5px]":""].join(" ")}>
         {isTbd?"Waiting…":isBye?"Bye":player?.name}
       </span>
-      {isWin&&<span className="text-[9px] text-white leading-none">✔</span>}
+      {target>1&&isPlayer&&(
+        <span className="flex gap-[2px] items-center flex-shrink-0">
+          {Array.from({length:target}).map((_,i)=>(
+            <span key={i} className="w-[5px] h-[5px] rounded-full border"
+              style={{borderColor:isWin?"rgba(255,255,255,.85)":"var(--ink)",
+                background:i<wins?(isWin?"#fff":"var(--ink)"):"transparent"}}/>
+          ))}
+        </span>
+      )}
+      {isWin&&<span className="text-[9px] text-white leading-none flex-shrink-0">✔</span>}
     </button>
   );
 }
 
-function MatchCard({m,onSlotClick,label}:{m:MatchResult;onSlotClick:(id:string,s:"A"|"B")=>void;label?:string}){
+function MatchCard({m,onSlotClick,label,seriesMap,format,readOnly,onReset}:{
+  m:MatchResult;onSlotClick:(id:string,s:"A"|"B")=>void;label?:string;
+  seriesMap:Series;format:Format;readOnly:boolean;onReset:(id:string)=>void;
+}){
   const icon=itemIconFor(m.def.id), lbl=label??matchLabel(m.def.id);
+  const target=targetFor(m.def,format);
+  const sv=seriesMap[m.def.id]||{a:0,b:0};
+  const showReset=!readOnly&&target>1&&!m.auto&&(sv.a+sv.b>0);
   return(
     <div style={{height:CARD_H}}
       className={["bg-white border border-[var(--ink)] rounded-[9px] p-1.5 flex flex-col justify-between",
         "shadow-[0_2px_0_rgba(22,35,59,.13)]",m.phantom?"opacity-40":""].join(" ")}>
       <div className="flex items-center justify-between gap-1">
         <span className="font-[Fredoka] font-bold text-[9.5px] tracking-wide text-[var(--ink)] bg-[#F5EFE0] border border-[var(--ink)] rounded-[3px] px-1 py-px leading-none">{lbl}</span>
-        {m.def.drop&&<span className="font-[Nunito] text-[8.5px] font-bold text-[var(--muted)] leading-none truncate max-w-[78px]">{m.def.drop}</span>}
+        <div className="flex items-center gap-1 min-w-0">
+          {m.def.drop&&<span className="font-[Nunito] text-[8.5px] font-bold text-[var(--muted)] leading-none truncate max-w-[78px]">{m.def.drop}</span>}
+          {showReset&&(
+            <button onClick={()=>onReset(m.def.id)} title="Reset this heat"
+              style={{touchAction:"manipulation"}}
+              className="text-[10px] leading-none text-[var(--muted)] hover:text-[var(--ink)] cursor-pointer flex-shrink-0">↺</button>
+          )}
+        </div>
       </div>
-      <SlotRow m={m} slot="A" onClick={onSlotClick}/>
+      <SlotRow m={m} slot="A" onClick={onSlotClick} wins={sv.a} target={target} readOnly={readOnly}/>
       <div className="flex justify-center">
         <span className="font-[Fredoka] text-[8.5px] font-bold text-[var(--ink)] bg-[var(--sun)] border border-[var(--ink)] rounded-full px-1.5 leading-none py-px" style={{transform:"rotate(-2deg)"}}>{icon} vs</span>
       </div>
-      <SlotRow m={m} slot="B" onClick={onSlotClick}/>
+      <SlotRow m={m} slot="B" onClick={onSlotClick} wins={sv.b} target={target} readOnly={readOnly}/>
     </div>
   );
 }
 
 // ─── Bracket Column (slot-height layout + connector lines) ─────────────────────
-
 interface ColProps {
-  ids: string[];
-  M: Record<string, MatchResult>;
+  ids: string[]; M: Record<string, MatchResult>;
   onSlotClick: (id: string, s: "A"|"B") => void;
-  slotH: number;
-  rightConn: boolean;
-  rightPair: boolean;
-  leftConn: boolean;
+  slotH: number; rightConn: boolean; rightPair: boolean; leftConn: boolean;
   gfLabels?: Record<string,string>;
+  seriesMap: Series; format: Format; readOnly: boolean; onReset: (id:string)=>void;
 }
 
-function BracketCol({ids,M,onSlotClick,slotH,rightConn,rightPair,leftConn,gfLabels}:ColProps){
+function BracketCol({ids,M,onSlotClick,slotH,rightConn,rightPair,leftConn,gfLabels,seriesMap,format,readOnly,onReset}:ColProps){
   const totalH = ids.length * slotH;
   const totalW = CARD_W + (leftConn?CONN_W:0) + (rightConn?CONN_W:0);
   return(
@@ -247,7 +304,8 @@ function BracketCol({ids,M,onSlotClick,slotH,rightConn,rightPair,leftConn,gfLabe
         const cy=(i+0.5)*slotH;
         return(
           <div key={id} style={{position:"absolute",top:cy-CARD_H/2,left:leftConn?CONN_W:0,width:CARD_W}}>
-            <MatchCard m={M[id]} onSlotClick={onSlotClick} label={gfLabels?.[id]}/>
+            <MatchCard m={M[id]} onSlotClick={onSlotClick} label={gfLabels?.[id]}
+              seriesMap={seriesMap} format={format} readOnly={readOnly} onReset={onReset}/>
           </div>
         );
       })}
@@ -268,20 +326,15 @@ function BracketCol({ids,M,onSlotClick,slotH,rightConn,rightPair,leftConn,gfLabe
 }
 
 // ─── Bracket Section ──────────────────────────────────────────────────────────
-
 interface SectionProps {
-  groups: BracketGroup[];
-  M: Record<string,MatchResult>;
+  groups: BracketGroup[]; M: Record<string,MatchResult>;
   onSlotClick: (id:string,s:"A"|"B")=>void;
-  tagColor: string;
-  tagText: string;
-  pipColor: string;
-  slotHFor: (i:number)=>number;
-  rightConnFor: (i:number)=>boolean;
-  rightPairFor: (i:number)=>boolean;
+  tagColor: string; tagText: string; pipColor: string;
+  slotHFor: (i:number)=>number; rightConnFor: (i:number)=>boolean; rightPairFor: (i:number)=>boolean;
+  seriesMap: Series; format: Format; readOnly: boolean; onReset: (id:string)=>void;
 }
 
-function BracketSection({groups,M,onSlotClick,tagColor,tagText,pipColor,slotHFor,rightConnFor,rightPairFor}:SectionProps){
+function BracketSection({groups,M,onSlotClick,tagColor,tagText,pipColor,slotHFor,rightConnFor,rightPairFor,seriesMap,format,readOnly,onReset}:SectionProps){
   return(
     <section className="mt-5">
       <div className="flex items-center gap-3 mb-2.5">
@@ -304,7 +357,8 @@ function BracketSection({groups,M,onSlotClick,tagColor,tagText,pipColor,slotHFor
               </div>
               <BracketCol
                 ids={g.ids} M={M} onSlotClick={onSlotClick}
-                slotH={slotH} rightConn={right} rightPair={pair} leftConn={left}/>
+                slotH={slotH} rightConn={right} rightPair={pair} leftConn={left}
+                seriesMap={seriesMap} format={format} readOnly={readOnly} onReset={onReset}/>
             </div>
           );
         })}
@@ -314,14 +368,12 @@ function BracketSection({groups,M,onSlotClick,tagColor,tagText,pipColor,slotHFor
 }
 
 // ─── Beer Mug SVG ─────────────────────────────────────────────────────────────
-
 function BeerMug({pct}:{pct:number}){
   const TOP=8,BOT=62,MUG_H=BOT-TOP;
   const fillH=Math.max(0,(pct/100)*MUG_H);
   const fillY=BOT-fillH;
   const show=fillH>0.5;
   const FOAM=9;
-
   return(
     <svg viewBox="0 0 56 72" width="44" height="58" style={{flexShrink:0,overflow:"visible"}}>
       <defs>
@@ -330,160 +382,367 @@ function BeerMug({pct}:{pct:number}){
           <stop offset="60%" stopColor="#FFA820"/>
           <stop offset="100%" stopColor="#D4700A"/>
         </linearGradient>
-        <clipPath id="mugClip">
-          <polygon points="5,7 49,7 44,64 10,64"/>
-        </clipPath>
-        <clipPath id="beerClip">
-          <rect x="0" y={fillY} width="56" height={fillH+2}/>
-        </clipPath>
+        <clipPath id="mugClip"><polygon points="5,7 49,7 44,64 10,64"/></clipPath>
+        <clipPath id="beerClip"><rect x="0" y={fillY} width="56" height={fillH+2}/></clipPath>
       </defs>
-
       <polygon points="5,7 49,7 44,64 10,64" fill="rgba(200,230,255,0.18)"/>
-
       {show&&(
-        <rect x="0" width="56" clipPath="url(#mugClip)"
-          fill="url(#beerGrad)"
-          style={{
-            y:`${fillY}px`,
-            height:`${fillH+8}px`,
-            transition:"y .55s ease, height .55s ease",
-          } as React.CSSProperties}
-        />
+        <rect x="0" width="56" clipPath="url(#mugClip)" fill="url(#beerGrad)"
+          style={{y:`${fillY}px`,height:`${fillH+8}px`,transition:"y .55s ease, height .55s ease"} as React.CSSProperties}/>
       )}
-
       {show&&(
         <g clipPath="url(#mugClip)"
-          style={{
-            transform:`translateY(${fillY-FOAM}px)`,
-            transition:"transform .55s ease",
-            animation:"foamOscillate 3.2s ease-in-out infinite",
-            transformOrigin:"27px 0px",
-          }}>
+          style={{transform:`translateY(${fillY-FOAM}px)`,transition:"transform .55s ease",
+            animation:"foamOscillate 3.2s ease-in-out infinite",transformOrigin:"27px 0px"}}>
           <rect x="0" y="0" width="56" height={FOAM+4} fill="white" opacity="0.96"/>
-          {[6,11,16,21,26,31,36,41,46].map((cx,i)=>(
-            <circle key={i} cx={cx} cy={1} r={5} fill="white" opacity="0.95"/>
-          ))}
-          {[3,9,15,21,27,33,39,45].map((cx,i)=>(
-            <circle key={i} cx={cx} cy={-2} r={3.2} fill="white" opacity="0.7"/>
-          ))}
+          {[6,11,16,21,26,31,36,41,46].map((cx,i)=>(<circle key={i} cx={cx} cy={1} r={5} fill="white" opacity="0.95"/>))}
+          {[3,9,15,21,27,33,39,45].map((cx,i)=>(<circle key={i} cx={cx} cy={-2} r={3.2} fill="white" opacity="0.7"/>))}
         </g>
       )}
-
       {show&&fillH>12&&(
         <g clipPath="url(#mugClip)">
-          <circle cx="21" cy={BOT-6} r="2.2" fill="rgba(255,255,255,0.55)"
-            style={{animation:"beerBubble1 2.4s ease-in infinite"}}/>
-          <circle cx="31" cy={BOT-3} r="1.5" fill="rgba(255,255,255,0.45)"
-            style={{animation:"beerBubble2 3s ease-in .9s infinite"}}/>
-          <circle cx="26" cy={BOT-10} r="1.8" fill="rgba(255,255,255,0.4)"
-            style={{animation:"beerBubble3 2.7s ease-in 1.7s infinite"}}/>
+          <circle cx="21" cy={BOT-6} r="2.2" fill="rgba(255,255,255,0.55)" style={{animation:"beerBubble1 2.4s ease-in infinite"}}/>
+          <circle cx="31" cy={BOT-3} r="1.5" fill="rgba(255,255,255,0.45)" style={{animation:"beerBubble2 3s ease-in .9s infinite"}}/>
+          <circle cx="26" cy={BOT-10} r="1.8" fill="rgba(255,255,255,0.4)" style={{animation:"beerBubble3 2.7s ease-in 1.7s infinite"}}/>
         </g>
       )}
-
-      <polygon points="5,7 49,7 44,64 10,64"
-        fill="none" stroke="#16233B" strokeWidth="2.5" strokeLinejoin="round"/>
-      <path d="M 49 22 C 62 22 62 52 49 52"
-        fill="none" stroke="#16233B" strokeWidth="3" strokeLinecap="round"/>
-      <path d="M 49 27 C 57 27 57 47 49 47"
-        fill="rgba(255,255,255,0.4)" stroke="#16233B" strokeWidth="1.5" strokeLinecap="round"/>
+      <polygon points="5,7 49,7 44,64 10,64" fill="none" stroke="#16233B" strokeWidth="2.5" strokeLinejoin="round"/>
+      <path d="M 49 22 C 62 22 62 52 49 52" fill="none" stroke="#16233B" strokeWidth="3" strokeLinecap="round"/>
+      <path d="M 49 27 C 57 27 57 47 49 47" fill="rgba(255,255,255,0.4)" stroke="#16233B" strokeWidth="1.5" strokeLinecap="round"/>
       <line x1="5" y1="7" x2="49" y2="7" stroke="#16233B" strokeWidth="2.5" strokeLinecap="round"/>
     </svg>
   );
 }
 
 // ─── Rules Modal ──────────────────────────────────────────────────────────────
-
 const RULES = [
-  {
-    icon: "🚗",
-    title: "No Drinking While Moving",
-    body: "You can drink during the race — but only while your kart is stopped. You cannot drink and drive at the same time. Pull over, take your sips, then get back in it.",
-  },
-  {
-    icon: "🍺",
-    title: "Finish Before You Cross",
-    body: "Your drink must be completely finished before you cross the finish line. If you cross with liquid still in the cup, your finish doesn't count — pull back and chug.",
-  },
-  {
-    icon: "🏁",
-    title: "Double Elimination",
-    body: "Everyone gets a second chance. Your first loss drops you to the Losers Bracket. A second loss and you're done. The Losers Bracket champion earns their way back to the Grand Final.",
-  },
-  {
-    icon: "⭐",
-    title: "Grand Final — WB Advantage",
-    body: "The Winners Bracket champion enters the Grand Final with a one-game lead. If they win Game 1, tournament over. If the Losers champ wins Game 1, scores reset to 0-0 and Game 2 decides everything.",
-  },
-  {
-    icon: "🎮",
-    title: "Track Selection",
-    body: "Agree on tracks before each round or use random — no take-backs after the race starts. Recommend sticking to the same cup/track pool for the whole tournament.",
-  },
-  {
-    icon: "🕐",
-    title: "Timing",
-    body: "Results are final the moment you cross the line with an empty cup. No mid-race disputes — settle them after the race is over.",
-  },
-  {
-    icon: "🏠",
-    title: "House Rules",
-    body: "Add your own before the tournament starts. Common ones: item usage rules, rubber cup holders, the infamous Blue Shell fine (one extra sip). Whatever you agree on before race 1 is law.",
-  },
+  {icon:"🚗",title:"No Drinking While Moving",body:"You can drink during the race — but only while your kart is stopped. Pull over, take your sips, then get back in it."},
+  {icon:"🍺",title:"Finish Before You Cross",body:"Your drink must be completely finished before you cross the finish line. Cross with liquid left and your finish doesn't count — pull back and chug."},
+  {icon:"🏁",title:"Double Elimination",body:"Everyone gets a second chance. Your first loss drops you to the Losers Bracket. A second loss and you're done. The Losers Bracket champ earns their way back to the Grand Final."},
+  {icon:"⭐",title:"Grand Final — WB Head Start",body:"The Winners Bracket champion enters the Grand Final already up one game. If they win the next game, tournament over. If the Losers champ wins it, the score levels and one more game decides everything."},
+  {icon:"🏎️",title:"4-Kart Heats",body:"Set the heat format to 4-Kart in Settings to fill the lobby to four. Only the two bracket racers matter — whoever of them places higher takes the race."},
+  {icon:"🎮",title:"Track Selection",body:"Agree on tracks before each round or use random — no take-backs after the race starts."},
+  {icon:"🏠",title:"House Rules",body:"Add your own before race 1. Blue Shell fine, rubber cup holders, whatever you agree on is law."},
 ];
-
 function RulesModal({onClose}:{onClose:()=>void}){
+  return(
+    <ModalShell onClose={onClose} title="🍺 BEERIO KART RULES" subtitle="Read before you race. Seriously.">
+      <div className="px-5 py-4 flex flex-col gap-3">
+        {RULES.map((r,i)=>(
+          <div key={i} className="flex gap-3 bg-white border-2 border-[var(--ink)] rounded-[12px] p-3 shadow-[0_2px_0_rgba(22,35,59,.1)]">
+            <span className="text-2xl flex-shrink-0 mt-0.5">{r.icon}</span>
+            <div>
+              <div className="font-[Fredoka] font-bold text-[14px] text-[var(--ink)] leading-tight mb-1">{r.title}</div>
+              <p className="font-[Nunito] text-[12.5px] font-semibold text-[var(--ink-soft)] leading-relaxed m-0">{r.body}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </ModalShell>
+  );
+}
+
+// ─── Shared Modal shell ───────────────────────────────────────────────────────
+function ModalShell({title,subtitle,onClose,children}:{title:string;subtitle?:string;onClose:()=>void;children:React.ReactNode}){
   return(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{background:"rgba(22,35,59,0.6)",backdropFilter:"blur(4px)"}}
       onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
-      <div className="relative w-full max-w-lg max-h-[85vh] flex flex-col bg-[var(--foam)] border-[3px] border-[var(--ink)] rounded-[18px] shadow-[0_8px_0_rgba(22,35,59,.3)]"
-        style={{overflowY:"auto"}}>
+      <div className="relative w-full max-w-lg max-h-[85vh] flex flex-col bg-[var(--foam)] border-[3px] border-[var(--ink)] rounded-[18px] shadow-[0_8px_0_rgba(22,35,59,.3)]" style={{overflowY:"auto"}}>
         <div className="sticky top-0 z-10 bg-[var(--sun)] border-b-[3px] border-[var(--ink)] px-5 py-3 flex items-center justify-between rounded-t-[15px]">
           <div>
-            <h2 className="font-[Luckiest_Guy,cursive] text-[22px] text-[var(--ink)] leading-none tracking-wider m-0"
-              style={{textShadow:"2px 2px 0 rgba(22,35,59,.15)"}}>
-              🍺 BEERIO KART RULES
-            </h2>
-            <p className="font-[Fredoka] font-semibold text-[11px] text-[var(--ink)] opacity-70 mt-0.5 m-0 tracking-wide">
-              Read before you race. Seriously.
-            </p>
+            <h2 className="font-[Luckiest_Guy,cursive] text-[20px] text-[var(--ink)] leading-none tracking-wider m-0" style={{textShadow:"2px 2px 0 rgba(22,35,59,.15)"}}>{title}</h2>
+            {subtitle&&<p className="font-[Fredoka] font-semibold text-[11px] text-[var(--ink)] opacity-70 mt-0.5 m-0 tracking-wide">{subtitle}</p>}
           </div>
-          <button onClick={onClose}
-            className="w-8 h-8 rounded-[8px] border-2 border-[var(--ink)] bg-white text-[var(--ink)] font-bold text-lg grid place-items-center shadow-[0_2px_0_rgba(22,35,59,.22)] hover:bg-[#F5EFE0] active:translate-y-px transition-all cursor-pointer">
-            ✕
-          </button>
+          <button onClick={onClose} className="w-8 h-8 rounded-[8px] border-2 border-[var(--ink)] bg-white text-[var(--ink)] font-bold text-lg grid place-items-center shadow-[0_2px_0_rgba(22,35,59,.22)] hover:bg-[#F5EFE0] active:translate-y-px transition-all cursor-pointer" style={{touchAction:"manipulation"}}>✕</button>
         </div>
-        <div className="px-5 py-4 flex flex-col gap-3">
-          {RULES.map((r,i)=>(
-            <div key={i} className="flex gap-3 bg-white border-2 border-[var(--ink)] rounded-[12px] p-3 shadow-[0_2px_0_rgba(22,35,59,.1)]">
-              <span className="text-2xl flex-shrink-0 mt-0.5">{r.icon}</span>
-              <div>
-                <div className="font-[Fredoka] font-bold text-[14px] text-[var(--ink)] leading-tight mb-1">{r.title}</div>
-                <p className="font-[Nunito] text-[12.5px] font-semibold text-[var(--ink-soft)] leading-relaxed m-0">{r.body}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+        {children}
       </div>
     </div>
   );
 }
 
-// ─── App ─────────────────────────────────────────────────────────────────────
+// ─── Format / Settings Modal ──────────────────────────────────────────────────
+function FormatModal({format,onChange,onClose}:{format:Format;onChange:(f:Partial<Format>,resetNeeded:boolean)=>void;onClose:()=>void}){
+  const seriesOpts:{v:SeriesLen;label:string;sub:string}[]=[
+    {v:1,label:"Single race",sub:"One race per match"},
+    {v:2,label:"Best of 3",sub:"First to 2 race wins"},
+    {v:3,label:"Best of 5",sub:"First to 3 race wins"},
+  ];
+  const heatOpts:{v:HeatSize;label:string;sub:string}[]=[
+    {v:2,label:"Duel (1v1)",sub:"Two racers, head to head"},
+    {v:4,label:"4-Kart Heat",sub:"Fill the lobby to 4; higher-placing bracket racer wins"},
+  ];
+  return(
+    <ModalShell onClose={onClose} title="⚙️ FORMAT" subtitle="Set this before you start racing.">
+      <div className="px-5 py-4 flex flex-col gap-5">
+        <div>
+          <div className="font-[Fredoka] font-bold text-[13px] text-[var(--ink)] mb-2">Match length</div>
+          <div className="flex flex-col gap-2">
+            {seriesOpts.map(o=>(
+              <button key={o.v} onClick={()=>onChange({series:o.v}, o.v!==format.series)}
+                style={{touchAction:"manipulation"}}
+                className={`flex items-center justify-between text-left px-3 py-2 rounded-[10px] border-2 border-[var(--ink)] cursor-pointer transition-all ${format.series===o.v?"bg-[var(--sun)] shadow-[0_2px_0_rgba(22,35,59,.22)]":"bg-white hover:bg-[#F5EFE0]"}`}>
+                <span><span className="font-[Fredoka] font-bold text-[13px] text-[var(--ink)]">{o.label}</span><span className="block font-[Nunito] text-[11px] font-semibold text-[var(--muted)]">{o.sub}</span></span>
+                {format.series===o.v&&<span className="text-[var(--ink)] font-bold">✓</span>}
+              </button>
+            ))}
+          </div>
+          <p className="font-[Nunito] text-[10.5px] font-semibold text-[var(--muted)] mt-1.5 leading-snug">Changing match length clears recorded results. The Grand Final always uses the winners-bracket head start.</p>
+        </div>
+        <div>
+          <div className="font-[Fredoka] font-bold text-[13px] text-[var(--ink)] mb-2">Heat format</div>
+          <div className="flex flex-col gap-2">
+            {heatOpts.map(o=>(
+              <button key={o.v} onClick={()=>onChange({heatSize:o.v}, false)}
+                style={{touchAction:"manipulation"}}
+                className={`flex items-center justify-between text-left px-3 py-2 rounded-[10px] border-2 border-[var(--ink)] cursor-pointer transition-all ${format.heatSize===o.v?"bg-[var(--sun)] shadow-[0_2px_0_rgba(22,35,59,.22)]":"bg-white hover:bg-[#F5EFE0]"}`}>
+                <span><span className="font-[Fredoka] font-bold text-[13px] text-[var(--ink)]">{o.label}</span><span className="block font-[Nunito] text-[11px] font-semibold text-[var(--muted)]">{o.sub}</span></span>
+                {format.heatSize===o.v&&<span className="text-[var(--ink)] font-bold">✓</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
 
+// ─── Share / Spectator (QR) Modal ─────────────────────────────────────────────
+function CopyRow({value,id,copied,onCopy}:{value:string;id:"live"|"snap";copied:""|"live"|"snap";onCopy:(id:"live"|"snap",v:string)=>void}){
+  return(
+    <div className="w-full flex items-center gap-2">
+      <input readOnly value={value} onFocus={e=>e.currentTarget.select()}
+        className="flex-1 min-w-0 px-2.5 py-2 bg-white border-2 border-[var(--ink)] rounded-[9px] font-[Nunito] text-[11px] font-semibold text-[var(--ink-soft)] outline-none truncate"/>
+      <button onClick={()=>onCopy(id,value)} style={{touchAction:"manipulation"}}
+        className="flex-shrink-0 px-3 py-2 rounded-[9px] border-2 border-[var(--ink)] bg-[var(--sun)] hover:bg-[var(--sun-deep)] font-[Fredoka] font-semibold text-[12px] text-[var(--ink)] shadow-[0_2px_0_rgba(22,35,59,.22)] active:translate-y-px transition-all cursor-pointer">
+        {copied===id?"Copied!":"Copy"}
+      </button>
+    </div>
+  );
+}
+
+function ShareModal({code,status,liveUrl,snapshotUrl,onClose,onRetry}:{
+  code:string|null;status:LiveStatus;liveUrl:string;snapshotUrl:string;onClose:()=>void;onRetry:()=>void;
+}){
+  const [copied,setCopied]=useState<""|"live"|"snap">("");
+  const copy=async(id:"live"|"snap",val:string)=>{
+    try{await navigator.clipboard.writeText(val);setCopied(id);setTimeout(()=>setCopied(""),1500);}catch{/* clipboard blocked */}
+  };
+  return(
+    <ModalShell onClose={onClose} title="📺 SPECTATOR VIEW" subtitle="Scan to follow the bracket live on another screen.">
+      <div className="px-5 py-5 flex flex-col items-center gap-4">
+        {status==="connecting"&&!code&&(
+          <div className="py-10 flex flex-col items-center gap-3">
+            <span className="text-3xl animate-pulse">📡</span>
+            <p className="font-[Fredoka] font-semibold text-[13px] text-[var(--muted)] m-0">Starting live session…</p>
+          </div>
+        )}
+        {status==="error"&&!code&&(
+          <div className="w-full flex flex-col items-center gap-3 text-center">
+            <span className="text-3xl">🔌</span>
+            <p className="font-[Nunito] font-semibold text-[12.5px] text-[var(--ink-soft)] m-0 leading-relaxed">
+              Couldn't reach the live server. Make sure the app is running with its API server (see setup notes), or use the one-time snapshot link below.
+            </p>
+            <button onClick={onRetry} style={{touchAction:"manipulation"}}
+              className="px-4 py-2 rounded-[9px] border-2 border-[var(--ink)] bg-[var(--sun)] hover:bg-[var(--sun-deep)] font-[Fredoka] font-semibold text-[12.5px] text-[var(--ink)] shadow-[0_2px_0_rgba(22,35,59,.22)] active:translate-y-px transition-all cursor-pointer">
+              Try again
+            </button>
+          </div>
+        )}
+        {code&&(
+          <>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full" style={{background:status==="live"?"var(--grass)":"var(--coral)",boxShadow:"0 0 0 2px rgba(22,35,59,.15)"}}/>
+              <span className="font-[Fredoka] font-bold text-[12.5px] text-[var(--ink)] tracking-wide">{status==="live"?"LIVE":"reconnecting…"} · Room {code}</span>
+            </div>
+            <div className="bg-white border-[3px] border-[var(--ink)] rounded-[14px] p-3 shadow-[0_3px_0_rgba(22,35,59,.18)]">
+              <QRCodeSVG value={liveUrl} size={196} bgColor="#FFFFFF" fgColor="#16233B" level="M" includeMargin={false}/>
+            </div>
+            <p className="font-[Nunito] text-[12px] font-semibold text-[var(--muted)] text-center leading-relaxed m-0">
+              Scan to watch the bracket update in real time as you record results. Anyone with the link follows along live — they can't edit.
+            </p>
+            <CopyRow value={liveUrl} id="live" copied={copied} onCopy={copy}/>
+          </>
+        )}
+        <details className="w-full">
+          <summary className="cursor-pointer font-[Nunito] text-[11px] font-bold text-[var(--muted)] select-none">One-time snapshot link (no live updates)</summary>
+          <p className="font-[Nunito] text-[10.5px] font-semibold text-[var(--muted)] mt-1.5 mb-2 leading-snug">A frozen copy of the bracket right now. Works without the server, but won't refresh.</p>
+          <CopyRow value={snapshotUrl} id="snap" copied={copied} onCopy={copy}/>
+        </details>
+      </div>
+    </ModalShell>
+  );
+}
+
+// ─── Match History ────────────────────────────────────────────────────────────
+function MatchHistory({BR,M,series,groupTitleById}:{BR:Bracket;M:Record<string,MatchResult>;series:Series;groupTitleById:Record<string,string>}){
+  const [open,setOpen]=useState(false);
+  const rows=BR.defs
+    .filter(d=>{const m=M[d.id];return m&&m.active&&m.decided&&!m.auto&&!m.phantom;})
+    .map(d=>{
+      const m=M[d.id];
+      const w=m.winner as Player;
+      const lname=(m.loser!==TBD&&m.loser!==BYE)?(m.loser as Player).name:"Bye";
+      const round=d.bracket==="gf"?(d.id==="GF2"?"Grand Final (Reset)":"Grand Final"):`${groupTitleById[d.id]} · ${matchLabel(d.id)}`;
+      const sv=series[d.id];
+      const score=sv&&(sv.a+sv.b>0)?(m.winSlot==="A"?`${sv.a}–${sv.b}`:`${sv.b}–${sv.a}`):null;
+      return {id:d.id,round,winner:w.name,loser:lname,score};
+    });
+  if(rows.length===0)return null;
+  return(
+    <div className="mt-6 border-t-2 border-dotted border-[#C9BFA8] pt-3">
+      <button onClick={()=>setOpen(o=>!o)} style={{touchAction:"manipulation"}}
+        className="w-full flex items-center justify-between font-[Fredoka] font-bold text-[13px] text-[var(--ink)] cursor-pointer py-1">
+        <span>📜 Match History <span className="text-[var(--muted)] font-semibold">({rows.length})</span></span>
+        <span className={`transition-transform ${open?"rotate-90":""}`}>▸</span>
+      </button>
+      {open&&(
+        <div className="mt-2 flex flex-col gap-1.5">
+          {rows.map((r,i)=>(
+            <div key={r.id} className="flex items-center gap-2 bg-white border border-[var(--ink)] rounded-[8px] px-2.5 py-1.5 shadow-[0_1px_0_rgba(22,35,59,.1)]">
+              <span className="font-[Fredoka] font-bold text-[9px] text-[var(--ink-soft)] w-5 flex-shrink-0">{i+1}</span>
+              <span className="font-[Fredoka] font-bold text-[9.5px] text-[var(--ink)] bg-[#F5EFE0] border border-[var(--ink)] rounded-[3px] px-1.5 py-px leading-none flex-shrink-0 min-w-[92px]">{r.round}</span>
+              <span className="font-[Nunito] text-[12px] font-bold text-[var(--ink)] flex-1 min-w-0 truncate">
+                <span className="text-[var(--grass-deep)]">{r.winner}</span>
+                <span className="text-[var(--muted)] font-semibold"> def. </span>
+                <span className="text-[var(--ink-soft)]">{r.loser}</span>
+              </span>
+              {r.score&&<span className="font-[Fredoka] font-bold text-[11px] text-[var(--ink)] flex-shrink-0">{r.score}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Spectator state encode / decode ──────────────────────────────────────────
+function encodeShare(s:SavedState):string{ return compressToEncodedURIComponent(JSON.stringify(s)); }
+function buildShareURL(s:SavedState):string{
+  const base=(typeof location!=="undefined")?location.origin+location.pathname:"";
+  return `${base}#v=${encodeShare(s)}`;
+}
+function readSpectator():SavedState|null{
+  if(typeof location==="undefined")return null;
+  const m=(location.hash||"").match(/[#&]v=([^&]+)/);
+  if(!m)return null;
+  try{
+    const raw=decompressFromEncodedURIComponent(m[1]);
+    if(!raw)return null;
+    const obj=JSON.parse(raw);
+    if(obj&&Array.isArray(obj.names)&&typeof obj.playerCount==="number")return obj as SavedState;
+  }catch{/* malformed */}
+  return null;
+}
+function loadSaved():SavedState|null{
+  if(typeof localStorage==="undefined")return null;
+  try{const raw=localStorage.getItem(STORAGE_KEY);if(raw){const o=JSON.parse(raw);if(o&&Array.isArray(o.names))return o as SavedState;}}catch{/* ignore */}
+  return null;
+}
+
+// ─── App ─────────────────────────────────────────────────────────────────────
 export default function App(){
-  const [playerCount,setPlayerCount]=useState(DEFAULT_COUNT);
-  const [names,setNames]=useState<string[]>(Array(DEFAULT_COUNT).fill(""));
-  const [results,setResults]=useState<Record<string,"A"|"B">>({});
-  const [BR,setBR]=useState<Bracket>(()=>buildBracket(DEFAULT_COUNT));
+  const spectatorInit=useMemo(()=>readSpectator(),[]);
+  const liveCode=useMemo(()=>(typeof location!=="undefined")?new URLSearchParams(location.search).get("s"):null,[]);
+  const isLive=!!liveCode;
+  const isSpectator=!!spectatorInit||isLive;
+  const initial=useMemo<SavedState>(()=>{
+    const base=spectatorInit ?? (isSpectator?null:loadSaved());
+    if(base)return {
+      playerCount:base.playerCount,
+      names:base.names.slice(0,base.playerCount).concat(Array(Math.max(0,base.playerCount-base.names.length)).fill("")),
+      results:base.results||{},
+      series:base.series||{},
+      format:{...DEFAULT_FORMAT,...(base.format||{})},
+    };
+    return {playerCount:DEFAULT_COUNT,names:Array(DEFAULT_COUNT).fill(""),results:{},series:{},format:DEFAULT_FORMAT};
+  },[spectatorInit,isSpectator]);
+
+  const [playerCount,setPlayerCount]=useState(initial.playerCount);
+  const [names,setNames]=useState<string[]>(initial.names);
+  const [results,setResults]=useState<Record<string,"A"|"B">>(initial.results);
+  const [series,setSeries]=useState<Series>(initial.series);
+  const [format,setFormat]=useState<Format>(initial.format);
+  const [BR,setBR]=useState<Bracket>(()=>buildBracket(initial.playerCount));
   const [rulesOpen,setRulesOpen]=useState(false);
+  const [formatOpen,setFormatOpen]=useState(false);
+  const [shareOpen,setShareOpen]=useState(false);
+  const [sessionCode,setSessionCode]=useState<string|null>(()=>{
+    if(isLive||typeof localStorage==="undefined")return null;
+    try{return localStorage.getItem(SESSION_KEY)||null;}catch{return null;}
+  });
+  const [liveStatus,setLiveStatus]=useState<LiveStatus>(isLive?"connecting":"idle");
+
+  // Persist (host only — never overwrite saved state while viewing a shared snapshot)
+  useEffect(()=>{
+    if(isSpectator||typeof localStorage==="undefined")return;
+    try{localStorage.setItem(STORAGE_KEY,JSON.stringify({playerCount,names,results,series,format}));}catch{/* quota */}
+  },[isSpectator,playerCount,names,results,series,format]);
+
+  // Host: push state to the live room (debounced) whenever it changes
+  useEffect(()=>{
+    if(isSpectator||!sessionCode)return;
+    const t=setTimeout(()=>{
+      fetch(`${API}/sessions/${sessionCode}`,{method:"PUT",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({state:{playerCount,names,results,series,format}})})
+        .then(r=>{if(!r.ok)throw new Error();setLiveStatus("live");})
+        .catch(()=>setLiveStatus("error"));
+    },600);
+    return ()=>clearTimeout(t);
+  },[isSpectator,sessionCode,playerCount,names,results,series,format]);
+
+  // Spectator: poll the live room every few seconds and mirror its state
+  useEffect(()=>{
+    if(!liveCode)return;
+    let active=true;
+    const apply=(s:Partial<SavedState>|undefined)=>{
+      if(!active||!s)return;
+      const pc=Math.max(MIN_PLAYERS,Math.min(MAX_PLAYERS,Number(s.playerCount)||DEFAULT_COUNT));
+      setPlayerCount(pc);
+      setNames(()=>{const a=Array.isArray(s.names)?[...s.names].slice(0,pc):[];while(a.length<pc)a.push("");return a;});
+      setResults(s.results||{});
+      setSeries(s.series||{});
+      setFormat({...DEFAULT_FORMAT,...(s.format||{})});
+      setBR(buildBracket(pc));
+    };
+    const tick=async()=>{
+      try{
+        const r=await fetch(`${API}/sessions/${liveCode}`);
+        if(r.ok){const d=await r.json();apply(d.state);setLiveStatus("live");}
+        else setLiveStatus("error");
+      }catch{setLiveStatus("error");}
+    };
+    tick();
+    const id=setInterval(tick,3000);
+    return ()=>{active=false;clearInterval(id);};
+  },[liveCode]);
+
+  // Host: open a live room (create on first share, reuse the saved code after)
+  const startLive=useCallback(async ()=>{
+    setLiveStatus("connecting");
+    const payload=JSON.stringify({state:{playerCount,names,results,series,format}});
+    try{
+      if(sessionCode){
+        const r=await fetch(`${API}/sessions/${sessionCode}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:payload});
+        if(!r.ok)throw new Error();
+        setLiveStatus("live");return;
+      }
+      const r=await fetch(`${API}/sessions`,{method:"POST",headers:{"Content-Type":"application/json"},body:payload});
+      if(!r.ok)throw new Error();
+      const {code}=await r.json();
+      setSessionCode(code);
+      try{localStorage.setItem(SESSION_KEY,code);}catch{/* ignore */}
+      setLiveStatus("live");
+    }catch{setLiveStatus("error");}
+  },[sessionCode,playerCount,names,results,series,format]);
 
   const handleSetCount=useCallback((n:number)=>{
     const next=Math.max(MIN_PLAYERS,Math.min(MAX_PLAYERS,n));
     if(next===playerCount)return;
     setPlayerCount(next);
     setNames(prev=>{const a=[...prev];while(a.length<next)a.push("");return a.slice(0,next);});
-    setResults({});setBR(buildBracket(next));
+    setResults({});setSeries({});setBR(buildBracket(next));
   },[playerCount]);
 
   const handleNameChange=useCallback((i:number,val:string)=>{
@@ -495,27 +754,58 @@ export default function App(){
       const real=prev.map(n=>n.trim()).filter(Boolean);
       for(let i=real.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[real[i],real[j]]=[real[j],real[i]];}
       return prev.map((_,i)=>real[i]||"");
-    });setResults({});
+    });setResults({});setSeries({});
   },[]);
 
-  const handleReset=useCallback(()=>setResults({}),[]);
-  const handleClearAll=useCallback(()=>{setNames(Array(playerCount).fill(""));setResults({});},[playerCount]);
+  const handleReset=useCallback(()=>{setResults({});setSeries({});},[]);
+  const handleClearAll=useCallback(()=>{setNames(Array(playerCount).fill(""));setResults({});setSeries({});},[playerCount]);
 
   const handleSlotClick=useCallback((matchId:string,slot:"A"|"B")=>{
-    setResults(prev=>{
-      const next={...prev};
-      if(next[matchId]===slot)delete next[matchId];else next[matchId]=slot;
-      let changed=true;
-      while(changed){
-        changed=false;const M=compute(BR,names,next);
-        for(const id in next){
-          const m=M[id];if(!m){delete next[id];changed=true;continue;}
-          if(!(m.a!==TBD&&m.a!==BYE&&m.b!==TBD&&m.b!==BYE)){delete next[id];changed=true;}
-        }
+    if(isSpectator)return;
+    const def=BR.byId[matchId];
+    const target=def?targetFor(def,format):1;
+    let nextR={...results};
+    const nextS:Series={...series};
+    if(target<=1){
+      if(nextR[matchId]===slot)delete nextR[matchId];else nextR[matchId]=slot;
+      delete nextS[matchId];
+    }else{
+      if(nextR[matchId]){ // already decided → undo whole match
+        delete nextR[matchId];delete nextS[matchId];
+      }else{
+        const cur=nextS[matchId]||{a:0,b:0};
+        const s={a:cur.a,b:cur.b};
+        if(slot==="A")s.a++;else s.b++;
+        nextS[matchId]=s;
+        if(s.a>=target||s.b>=target)nextR[matchId]=s.a>s.b?"A":"B";
       }
-      return next;
-    });
-  },[BR,names]);
+    }
+    const cleaned=pruneState(BR,names,nextR,nextS);
+    setResults(cleaned.results);setSeries(cleaned.series);
+  },[isSpectator,BR,format,results,series,names]);
+
+  const handleResetMatch=useCallback((matchId:string)=>{
+    if(isSpectator)return;
+    const nextR={...results};const nextS:Series={...series};
+    delete nextR[matchId];delete nextS[matchId];
+    const cleaned=pruneState(BR,names,nextR,nextS);
+    setResults(cleaned.results);setSeries(cleaned.series);
+  },[isSpectator,BR,results,series,names]);
+
+  const handleFormatChange=useCallback((partial:Partial<Format>,resetNeeded:boolean)=>{
+    if(resetNeeded){
+      const ok=typeof window==="undefined"?true:window.confirm("Changing match length clears recorded results. Continue?");
+      if(!ok)return;
+      setResults({});setSeries({});
+    }
+    setFormat(f=>({...f,...partial}));
+  },[]);
+
+  const editCopy=useCallback(()=>{
+    // Spectator → take a local editable copy
+    try{localStorage.setItem(STORAGE_KEY,JSON.stringify({playerCount,names,results,series,format}));}catch{/* ignore */}
+    location.href=location.origin+location.pathname;
+  },[playerCount,names,results,series,format]);
 
   const M=compute(BR,names,results);
   const champ=getChampion(M);
@@ -541,188 +831,235 @@ export default function App(){
   const gfB=gfMatch?.b!==TBD&&gfMatch?.b!==BYE&&gfMatch?.b?(gfMatch.b as Player).name??null:null;
   const gfBothKnown=!!(gfA&&gfB);
   let gfScoreA=1,gfScoreB=0;
-  if(gfMatch?.decided){
-    if(gfMatch.winSlot==="A")gfScoreA++;
-    else gfScoreB++;
-  }
+  if(gfMatch?.decided){if(gfMatch.winSlot==="A")gfScoreA++;else gfScoreB++;}
 
   const wbRightConn=(i:number)=>i<wbGroups.length-1;
   const wbRightPair=(_i:number)=>true;
   const lbRightConn=(i:number)=>i%2===1&&i<lbGroups.length-1;
   const lbRightPair=(_i:number)=>true;
 
-  return(
-    <div className="min-h-screen">
-      {rulesOpen&&<RulesModal onClose={()=>setRulesOpen(false)}/>}
-      <header className="relative border-b-[3px] border-[var(--ink)] overflow-hidden" style={{
-        background:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 180' preserveAspectRatio='none'%3E%3Cg fill='%23FFFFFF'%3E%3Cellipse cx='170' cy='44' rx='72' ry='26'/%3E%3Cellipse cx='232' cy='36' rx='46' ry='22'/%3E%3Cellipse cx='1080' cy='50' rx='88' ry='32'/%3E%3Cellipse cx='1160' cy='38' rx='58' ry='24'/%3E%3C/g%3E%3C/svg%3E") no-repeat top/100%,linear-gradient(180deg,var(--sky-top) 0%,var(--sky-bot) 78%)`}}>
-        <div className="h-3" style={{backgroundImage:"linear-gradient(45deg,#16233B 25%,transparent 25%),linear-gradient(-45deg,#16233B 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#16233B 75%),linear-gradient(-45deg,transparent 75%,#16233B 75%)",backgroundSize:"12px 12px",backgroundPosition:"0 0,0 6px,6px -6px,-6px 0",backgroundColor:"#FFF",borderBottom:"2.5px solid var(--ink)"}}/>
-        <div className="relative z-10 max-w-[1360px] mx-auto px-4 py-3 flex flex-wrap gap-3 items-center justify-between">
-          <div className="flex flex-col gap-2">
-            <h1 className="font-[Luckiest_Guy,cursive] text-[clamp(20px,3.4vw,38px)] m-0 leading-none tracking-wide text-[var(--sun)]"
-              style={{WebkitTextStroke:"2px var(--ink)",textShadow:"3px 3px 0 var(--ink)",transform:"rotate(-2deg)"}}>
-              BEERIO KART
-            </h1>
-            <div className="font-[Fredoka] font-semibold text-[11.5px] tracking-wider text-[var(--ink)] bg-[var(--foam)] border-2 border-[var(--ink)] rounded-full px-2.5 py-1 inline-flex items-center gap-2 self-start shadow-[0_2px_0_rgba(22,35,59,.18)]">
-              <span className="w-1.5 h-1.5 rounded-full bg-[var(--grass)] shadow-[0_0_0_1.5px_var(--ink)]"/>
-              🏎️ Double Elimination Night
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <button onClick={()=>setRulesOpen(true)}
-              title="Rules"
-              className="w-9 h-9 rounded-[10px] border-2 border-[var(--ink)] bg-[var(--foam)] text-[var(--ink)] font-[Fredoka] font-bold text-[15px] grid place-items-center shadow-[0_3px_0_rgba(22,35,59,.22)] hover:bg-white active:translate-y-px transition-all cursor-pointer flex-shrink-0">
-              ℹ️
-            </button>
-            <div className="flex items-center gap-3.5 bg-[var(--foam)] border-2 border-[var(--ink)] rounded-[11px] px-3 py-2 shadow-[0_3px_0_rgba(22,35,59,.18)]">
-              <BeerMug pct={pct}/>
-              <div className="font-[Fredoka]">
-                <div className="text-[19px] font-bold text-[var(--ink)] leading-none">{done} / {playable}</div>
-                <div className="text-[10px] text-[var(--ink-soft)] tracking-widest font-semibold mt-0.5">🍄 Heats Run</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
+  const groupTitleById=useMemo(()=>{
+    const map:Record<string,string>={};
+    for(const g of BR.groups)for(const id of g.ids)map[id]=g.title;
+    return map;
+  },[BR]);
 
-      <div className="max-w-[1360px] mx-auto px-4 py-3.5 flex flex-wrap gap-5 items-start">
-        <div className="flex-1 min-w-[260px]">
-          <div className="font-[Fredoka] font-bold text-[13.5px] text-[var(--ink)] mb-2 flex items-center gap-2.5 flex-wrap">
-            <span>Racers</span>
-            <span className="inline-flex items-center gap-1.5">
-              <button onClick={()=>handleSetCount(playerCount-1)} disabled={playerCount<=MIN_PLAYERS}
-                className="w-6 h-6 rounded-[6px] border-2 border-[var(--ink)] bg-[var(--sun)] text-[var(--ink)] font-bold text-base cursor-pointer grid place-items-center shadow-[0_2px_0_rgba(22,35,59,.26)] active:translate-y-px transition-all disabled:opacity-40 hover:bg-[var(--sun-deep)]">−</button>
-              <span className="font-bold text-[19px] text-[var(--ink)] min-w-[24px] text-center">{playerCount}</span>
-              <button onClick={()=>handleSetCount(playerCount+1)} disabled={playerCount>=MAX_PLAYERS}
-                className="w-6 h-6 rounded-[6px] border-2 border-[var(--ink)] bg-[var(--sun)] text-[var(--ink)] font-bold text-base cursor-pointer grid place-items-center shadow-[0_2px_0_rgba(22,35,59,.26)] active:translate-y-px transition-all disabled:opacity-40 hover:bg-[var(--sun-deep)]">+</button>
-              <span className="font-[Nunito] font-semibold text-[10px] text-[var(--muted)]">{capText}</span>
-            </span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mb-2">
-            {names.map((name,i)=>(
-              <div key={i} className="relative">
-                <span className="absolute left-2 top-1/2 -translate-y-1/2 font-[Fredoka] font-bold text-[10.5px] text-[var(--ink)] bg-[var(--sun)] border border-[var(--ink)] w-[17px] h-[17px] rounded-[4px] grid place-items-center z-10">{i+1}</span>
-                <input type="text" value={name} onChange={e=>handleNameChange(i,e.target.value)}
-                  placeholder={`Racer ${i+1}`} maxLength={18} autoComplete="off"
-                  className="w-full pl-7 pr-2 py-1.5 bg-white border-2 border-[var(--ink)] rounded-[8px] text-[var(--ink)] font-[Nunito] text-[12.5px] font-bold outline-none shadow-[0_2px_0_rgba(22,35,59,.1)] focus:shadow-[0_0_0_2px_var(--sun),0_2px_0_rgba(22,35,59,.1)] placeholder:text-[#A9B2C2]"/>
-                {!name.trim()&&<span className="absolute right-1.5 top-1/2 -translate-y-1/2 font-[Fredoka] font-bold text-[8.5px] text-white bg-[var(--coral)] border border-[var(--ink)] rounded-[3px] px-1 py-px pointer-events-none">BYE</span>}
-              </div>
-            ))}
-          </div>
-          <p className="text-[11px] text-[var(--muted)] font-semibold leading-relaxed">Seed 1 is strongest. Empty slots are byes. Shuffle to randomize.</p>
-        </div>
-        <div className="flex flex-col gap-2 min-w-[152px]">
-          {[{icon:"❓",label:"Shuffle seeds",onClick:handleShuffle,p:true},{icon:"↺",label:"Reset results",onClick:handleReset,p:false},{icon:"🧹",label:"Clear names",onClick:handleClearAll,p:false}].map(btn=>(
-            <button key={btn.label} onClick={btn.onClick}
-              className={`font-[Fredoka] tracking-wide font-semibold text-[12.5px] cursor-pointer px-3 py-2 rounded-[9px] border-2 border-[var(--ink)] text-[var(--ink)] shadow-[0_3px_0_rgba(22,35,59,.22)] active:translate-y-[2px] active:shadow-[0_1px_0_rgba(22,35,59,.22)] transition-all text-left flex items-center gap-2 ${btn.p?"bg-[var(--sun)] hover:bg-[var(--sun-deep)]":"bg-white hover:bg-[#F5EFE0]"}`}>
-              <span>{btn.icon}</span>{btn.label}
-            </button>
-          ))}
+  const liveUrl=useMemo(()=>(sessionCode&&typeof location!=="undefined")?`${location.origin}${location.pathname}?s=${sessionCode}`:"",[sessionCode]);
+  const snapshotUrl=useMemo(()=>shareOpen?buildShareURL({playerCount,names,results,series,format}):"",[shareOpen,playerCount,names,results,series,format]);
+
+  return(
+    <>
+      {/* Portrait blocker (tablets only) */}
+      <div className="app-portrait-blocker">
+        <div className="rp-card">
+          <span className="rp-ic">📱</span>
+          <h2>TURN ME SIDEWAYS</h2>
+          <p>This bracket is built for landscape. Rotate to start racing.</p>
         </div>
       </div>
 
-      <div className="max-w-[1360px] mx-auto px-4 pb-12">
-        {realCount<2?(
-          <div className="mt-6 border-2 border-dashed border-[var(--ink)] rounded-[14px] p-10 text-center bg-[#FBF6EA]">
-            <span className="text-4xl block mb-3">🏁</span>
-            <h3 className="font-[Luckiest_Guy,cursive] text-[var(--ink)] text-xl tracking-wider m-0 mb-2">READY TO RACE?</h3>
-            <p className="font-[Nunito] font-semibold text-[var(--muted)] text-[13px] m-0 leading-relaxed">Drop in at least two racer names above — the bracket builds itself.</p>
-          </div>
-        ):(
-          <>
-            <BracketSection groups={wbGroups} M={M} onSlotClick={handleSlotClick}
-              tagColor="var(--grass)" tagText="Winners Bracket" pipColor="var(--grass)"
-              slotHFor={i=>wbSlotH(i+1)}
-              rightConnFor={wbRightConn} rightPairFor={wbRightPair}/>
+      <div className="app-main min-h-screen">
+        {rulesOpen&&<RulesModal onClose={()=>setRulesOpen(false)}/>}
+        {formatOpen&&<FormatModal format={format} onChange={handleFormatChange} onClose={()=>setFormatOpen(false)}/>}
+        {shareOpen&&<ShareModal code={sessionCode} status={liveStatus} liveUrl={liveUrl} snapshotUrl={snapshotUrl} onClose={()=>setShareOpen(false)} onRetry={startLive}/>}
 
-            {lbGroups.length>0&&(
-              <BracketSection groups={lbGroups} M={M} onSlotClick={handleSlotClick}
-                tagColor="var(--coral)" tagText="Losers Bracket" pipColor="var(--coral)"
-                slotHFor={i=>lbSlotH(i)}
-                rightConnFor={lbRightConn} rightPairFor={lbRightPair}/>
-            )}
-
-            <section className="mt-5">
-              <div className="flex items-center gap-3 mb-2.5">
-                <span className="w-3 h-3 border-2 border-[var(--ink)] rotate-45 rounded-sm" style={{background:"var(--grape)"}}/>
-                <span className="font-[Luckiest_Guy,cursive] text-[17px] tracking-wider text-white rounded-[9px] px-3 py-0.5 shadow-[0_3px_0_rgba(22,35,59,.22)]"
-                  style={{background:"var(--grape)",border:"2px solid var(--ink)",transform:"rotate(-1deg)"}}>Grand Final</span>
-                <span className="h-[2px] bg-[var(--ink)] opacity-15 flex-1 rounded"/>
+        {/* Header */}
+        <header className="relative border-b-[3px] border-[var(--ink)] overflow-hidden" style={{
+          background:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 180' preserveAspectRatio='none'%3E%3Cg fill='%23FFFFFF'%3E%3Cellipse cx='170' cy='44' rx='72' ry='26'/%3E%3Cellipse cx='232' cy='36' rx='46' ry='22'/%3E%3Cellipse cx='1080' cy='50' rx='88' ry='32'/%3E%3Cellipse cx='1160' cy='38' rx='58' ry='24'/%3E%3C/g%3E%3C/svg%3E") no-repeat top/100%,linear-gradient(180deg,var(--sky-top) 0%,var(--sky-bot) 78%)`}}>
+          <div className="h-3" style={{backgroundImage:"linear-gradient(45deg,#16233B 25%,transparent 25%),linear-gradient(-45deg,#16233B 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#16233B 75%),linear-gradient(-45deg,transparent 75%,#16233B 75%)",backgroundSize:"12px 12px",backgroundPosition:"0 0,0 6px,6px -6px,-6px 0",backgroundColor:"#FFF",borderBottom:"2.5px solid var(--ink)"}}/>
+          <div className="relative z-10 max-w-[1360px] mx-auto px-4 py-3 flex flex-wrap gap-3 items-center justify-between">
+            <div className="flex flex-col gap-2">
+              <h1 className="font-[Luckiest_Guy,cursive] text-[clamp(20px,3.4vw,38px)] m-0 leading-none tracking-wide text-[var(--sun)]"
+                style={{WebkitTextStroke:"2px var(--ink)",textShadow:"3px 3px 0 var(--ink)",transform:"rotate(-2deg)"}}>BEERIO KART</h1>
+              <div className="font-[Fredoka] font-semibold text-[11.5px] tracking-wider text-[var(--ink)] bg-[var(--foam)] border-2 border-[var(--ink)] rounded-full px-2.5 py-1 inline-flex items-center gap-2 self-start shadow-[0_2px_0_rgba(22,35,59,.18)]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--grass)] shadow-[0_0_0_1.5px_var(--ink)]"/>
+                {isSpectator?(isLive?"📺 Live Spectator":"📺 Spectator View"):(sessionCode&&liveStatus==="live"?`🔴 LIVE · Room ${sessionCode}`:"🏎️ Double Elimination Night")}
               </div>
-
-              {gfBothKnown&&!champ&&(
-                <div className="mb-3 inline-flex items-center gap-0 border-2 border-[var(--ink)] rounded-[10px] overflow-hidden shadow-[0_2px_0_rgba(22,35,59,.18)]">
-                  <div className={`flex items-center gap-2 px-3 py-1.5 ${gfScoreA>gfScoreB?"bg-[var(--sun)]":"bg-white"}`}>
-                    <span className="font-[Fredoka] font-bold text-[12px] text-[var(--ink)] max-w-[110px] truncate">{gfA}</span>
-                    <span className="font-[Luckiest_Guy,cursive] text-[20px] text-[var(--ink)] leading-none">{gfScoreA}</span>
-                  </div>
-                  <div className="w-px self-stretch bg-[var(--ink)]"/>
-                  <div className="px-2 py-1.5 bg-[var(--grape)] flex flex-col items-center gap-0">
-                    <span className="font-[Fredoka] font-bold text-[8px] text-white tracking-widest uppercase leading-none">Best of</span>
-                    <span className="font-[Luckiest_Guy,cursive] text-[13px] text-white leading-none">3</span>
-                  </div>
-                  <div className="w-px self-stretch bg-[var(--ink)]"/>
-                  <div className={`flex items-center gap-2 px-3 py-1.5 ${gfScoreB>gfScoreA?"bg-[var(--sun)]":"bg-white"}`}>
-                    <span className="font-[Luckiest_Guy,cursive] text-[20px] text-[var(--ink)] leading-none">{gfScoreB}</span>
-                    <span className="font-[Fredoka] font-bold text-[12px] text-[var(--ink)] max-w-[110px] truncate">{gfB}</span>
-                  </div>
-                  <div className="w-px self-stretch bg-[var(--ink)]"/>
-                  <div className="px-2 py-1.5 bg-[#F0F8FF]">
-                    <span className="font-[Fredoka] font-bold text-[8.5px] text-[var(--ink)] tracking-wide leading-tight whitespace-nowrap">WB<br/>+1</span>
-                  </div>
-                </div>
+            </div>
+            <div className="flex items-center gap-2.5">
+              {!isSpectator&&(
+                <>
+                  <button onClick={()=>{setShareOpen(true);startLive();}} title="Spectator view / QR"
+                    className="w-9 h-9 rounded-[10px] border-2 border-[var(--ink)] bg-[var(--foam)] text-[var(--ink)] text-[15px] grid place-items-center shadow-[0_3px_0_rgba(22,35,59,.22)] hover:bg-white active:translate-y-px transition-all cursor-pointer flex-shrink-0" style={{touchAction:"manipulation"}}>📺</button>
+                  <button onClick={()=>setFormatOpen(true)} title="Format"
+                    className="w-9 h-9 rounded-[10px] border-2 border-[var(--ink)] bg-[var(--foam)] text-[var(--ink)] text-[15px] grid place-items-center shadow-[0_3px_0_rgba(22,35,59,.22)] hover:bg-white active:translate-y-px transition-all cursor-pointer flex-shrink-0" style={{touchAction:"manipulation"}}>⚙️</button>
+                </>
               )}
-              <div className="flex flex-wrap gap-4 items-center">
-                <div className="flex flex-col gap-2" style={{width:CARD_W}}>
-                  {gfMatches.map(id=>(
-                    <MatchCard key={id} m={M[id]} onSlotClick={handleSlotClick} label={id==="GF"?"Game 1":"Reset · G2"}/>
-                  ))}
-                  {showReset&&<p className="font-[Nunito] text-[10.5px] font-bold text-[var(--grape-deep)] leading-snug">Lower-bracket forced a reset — one more game decides it.</p>}
+              <button onClick={()=>setRulesOpen(true)} title="Rules"
+                className="w-9 h-9 rounded-[10px] border-2 border-[var(--ink)] bg-[var(--foam)] text-[var(--ink)] text-[15px] grid place-items-center shadow-[0_3px_0_rgba(22,35,59,.22)] hover:bg-white active:translate-y-px transition-all cursor-pointer flex-shrink-0" style={{touchAction:"manipulation"}}>ℹ️</button>
+              <div className="flex items-center gap-3.5 bg-[var(--foam)] border-2 border-[var(--ink)] rounded-[11px] px-3 py-2 shadow-[0_3px_0_rgba(22,35,59,.18)]">
+                <BeerMug pct={pct}/>
+                <div className="font-[Fredoka]">
+                  <div className="text-[19px] font-bold text-[var(--ink)] leading-none">{done} / {playable}</div>
+                  <div className="text-[10px] text-[var(--ink-soft)] tracking-widest font-semibold mt-0.5">🍄 Heats Run</div>
                 </div>
-                {champ ? (
-                  <div className="flex-1 min-w-[220px] rounded-2xl border-[3px] border-[var(--ink)] flex flex-col items-center justify-center gap-3 px-8 py-8 text-center"
-                    style={{
-                      background:"radial-gradient(130% 130% at 50% -10%,rgba(255,192,46,.7),rgba(255,192,46,0) 62%),var(--card2)",
-                      boxShadow:"0 6px 0 rgba(22,35,59,.22), 0 12px 32px rgba(22,35,59,.12)",
-                      animation:"champPop .4s cubic-bezier(.34,1.56,.64,1) both",
-                    }}>
-                    <span style={{fontSize:52,lineHeight:1,filter:"drop-shadow(0 4px 0 rgba(22,35,59,.18))",animation:"champBounce 1.8s ease-in-out infinite"}}>🍻</span>
-                    <div>
-                      <div className="font-[Fredoka] tracking-[3px] text-[11px] text-[var(--sun-deep)] font-bold uppercase mb-1">🏆 Champion 🏆</div>
-                      <div className="font-[Luckiest_Guy,cursive] text-[clamp(22px,4vw,34px)] text-[var(--ink)] leading-tight tracking-wide" style={{textShadow:"2px 2px 0 rgba(22,35,59,.1)"}}>
-                        {champ.name}
-                      </div>
-                    </div>
-                    <div className="font-[Fredoka] font-semibold text-[13px] text-[var(--ink-soft)]">
-                      Drinks are on the winner 🍺
-                    </div>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* Spectator banner */}
+        {isSpectator&&(
+          <div className="max-w-[1360px] mx-auto px-4 mt-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-[var(--grape)] text-white border-2 border-[var(--ink)] rounded-[11px] px-4 py-2 shadow-[0_3px_0_rgba(22,35,59,.22)]">
+              <span className="font-[Fredoka] font-semibold text-[12.5px] flex items-center gap-2">
+                {isLive?(
+                  <>
+                    <span className="w-2.5 h-2.5 rounded-full inline-block" style={{background:liveStatus==="live"?"#7CFFB0":"#FFC9C9"}}/>
+                    {liveStatus==="error"?"Can't reach the host — the room may have ended.":liveStatus==="live"?"Watching live — updates automatically.":"Connecting to live room…"}
+                  </>
+                ):"📺 You're watching a shared snapshot — read only."}
+              </span>
+              <button onClick={editCopy} style={{touchAction:"manipulation"}}
+                className="font-[Fredoka] font-bold text-[12px] bg-white text-[var(--ink)] border-2 border-[var(--ink)] rounded-[8px] px-3 py-1 shadow-[0_2px_0_rgba(22,35,59,.25)] active:translate-y-px cursor-pointer">Edit a copy</button>
+            </div>
+          </div>
+        )}
+
+        {/* Controls (hidden for spectators) */}
+        {!isSpectator&&(
+          <div className="max-w-[1360px] mx-auto px-4 py-3.5 flex flex-wrap gap-5 items-start">
+            <div className="flex-1 min-w-[260px]">
+              <div className="font-[Fredoka] font-bold text-[13.5px] text-[var(--ink)] mb-2 flex items-center gap-2.5 flex-wrap">
+                <span>Racers</span>
+                <span className="inline-flex items-center gap-1.5">
+                  <button onClick={()=>handleSetCount(playerCount-1)} disabled={playerCount<=MIN_PLAYERS} style={{touchAction:"manipulation"}}
+                    className="w-6 h-6 rounded-[6px] border-2 border-[var(--ink)] bg-[var(--sun)] text-[var(--ink)] font-bold text-base cursor-pointer grid place-items-center shadow-[0_2px_0_rgba(22,35,59,.26)] active:translate-y-px transition-all disabled:opacity-40 hover:bg-[var(--sun-deep)]">−</button>
+                  <span className="font-bold text-[19px] text-[var(--ink)] min-w-[24px] text-center">{playerCount}</span>
+                  <button onClick={()=>handleSetCount(playerCount+1)} disabled={playerCount>=MAX_PLAYERS} style={{touchAction:"manipulation"}}
+                    className="w-6 h-6 rounded-[6px] border-2 border-[var(--ink)] bg-[var(--sun)] text-[var(--ink)] font-bold text-base cursor-pointer grid place-items-center shadow-[0_2px_0_rgba(22,35,59,.26)] active:translate-y-px transition-all disabled:opacity-40 hover:bg-[var(--sun-deep)]">+</button>
+                  <span className="font-[Nunito] font-semibold text-[10px] text-[var(--muted)]">{capText}</span>
+                  <span className="font-[Nunito] font-semibold text-[10px] text-[var(--ink)] bg-[var(--card2)] border border-[var(--ink)] rounded-full px-2 py-px">
+                    {format.heatSize===4?"4-kart":"duel"} · {format.series===1?"single":format.series===2?"Bo3":"Bo5"}
+                  </span>
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mb-2">
+                {names.map((name,i)=>(
+                  <div key={i} className="relative">
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 font-[Fredoka] font-bold text-[10.5px] text-[var(--ink)] bg-[var(--sun)] border border-[var(--ink)] w-[17px] h-[17px] rounded-[4px] grid place-items-center z-10">{i+1}</span>
+                    <input type="text" value={name} onChange={e=>handleNameChange(i,e.target.value)}
+                      placeholder={`Racer ${i+1}`} maxLength={18} autoComplete="off"
+                      className="w-full pl-7 pr-2 py-1.5 bg-white border-2 border-[var(--ink)] rounded-[8px] text-[var(--ink)] font-[Nunito] text-[12.5px] font-bold outline-none shadow-[0_2px_0_rgba(22,35,59,.1)] focus:shadow-[0_0_0_2px_var(--sun),0_2px_0_rgba(22,35,59,.1)] placeholder:text-[#A9B2C2]"/>
+                    {!name.trim()&&<span className="absolute right-1.5 top-1/2 -translate-y-1/2 font-[Fredoka] font-bold text-[8.5px] text-white bg-[var(--coral)] border border-[var(--ink)] rounded-[3px] px-1 py-px pointer-events-none">BYE</span>}
                   </div>
-                ) : (
-                  <div className="flex-1 min-w-[180px] max-w-[240px] rounded-xl border-2 border-dashed border-[var(--ink)] flex flex-col items-center justify-center gap-1.5 px-5 py-4 text-center bg-[#FBF6EA]">
-                    <span className="text-3xl">🏁</span>
-                    <span className="font-[Fredoka] tracking-[2px] text-[9.5px] text-[var(--sun-deep)] font-bold uppercase">Champion</span>
-                    <span className="font-[Fredoka] font-semibold text-[var(--muted)] text-[13px]">To be crowned</span>
+                ))}
+              </div>
+              <p className="text-[11px] text-[var(--muted)] font-semibold leading-relaxed">Seed 1 is strongest. Empty slots are byes. Shuffle to randomize.</p>
+            </div>
+            <div className="flex flex-col gap-2 min-w-[152px]">
+              {[{icon:"❓",label:"Shuffle seeds",onClick:handleShuffle,p:true},{icon:"↺",label:"Reset results",onClick:handleReset,p:false},{icon:"🧹",label:"Clear names",onClick:handleClearAll,p:false}].map(btn=>(
+                <button key={btn.label} onClick={btn.onClick} style={{touchAction:"manipulation"}}
+                  className={`font-[Fredoka] tracking-wide font-semibold text-[12.5px] cursor-pointer px-3 py-2 rounded-[9px] border-2 border-[var(--ink)] text-[var(--ink)] shadow-[0_3px_0_rgba(22,35,59,.22)] active:translate-y-[2px] active:shadow-[0_1px_0_rgba(22,35,59,.22)] transition-all text-left flex items-center gap-2 ${btn.p?"bg-[var(--sun)] hover:bg-[var(--sun-deep)]":"bg-white hover:bg-[#F5EFE0]"}`}>
+                  <span>{btn.icon}</span>{btn.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Stage */}
+        <div className="max-w-[1360px] mx-auto px-4 pb-12">
+          {realCount<2?(
+            <div className="mt-6 border-2 border-dashed border-[var(--ink)] rounded-[14px] p-10 text-center bg-[#FBF6EA]">
+              <span className="text-4xl block mb-3">🏁</span>
+              <h3 className="font-[Luckiest_Guy,cursive] text-[var(--ink)] text-xl tracking-wider m-0 mb-2">READY TO RACE?</h3>
+              <p className="font-[Nunito] font-semibold text-[var(--muted)] text-[13px] m-0 leading-relaxed">Drop in at least two racer names above — the bracket builds itself.</p>
+            </div>
+          ):(
+            <>
+              <BracketSection groups={wbGroups} M={M} onSlotClick={handleSlotClick}
+                tagColor="var(--grass)" tagText="Winners Bracket" pipColor="var(--grass)"
+                slotHFor={i=>wbSlotH(i+1)} rightConnFor={wbRightConn} rightPairFor={wbRightPair}
+                seriesMap={series} format={format} readOnly={isSpectator} onReset={handleResetMatch}/>
+
+              {lbGroups.length>0&&(
+                <BracketSection groups={lbGroups} M={M} onSlotClick={handleSlotClick}
+                  tagColor="var(--coral)" tagText="Losers Bracket" pipColor="var(--coral)"
+                  slotHFor={i=>lbSlotH(i)} rightConnFor={lbRightConn} rightPairFor={lbRightPair}
+                  seriesMap={series} format={format} readOnly={isSpectator} onReset={handleResetMatch}/>
+              )}
+
+              {/* Grand Final */}
+              <section className="mt-5">
+                <div className="flex items-center gap-3 mb-2.5">
+                  <span className="w-3 h-3 border-2 border-[var(--ink)] rotate-45 rounded-sm" style={{background:"var(--grape)"}}/>
+                  <span className="font-[Luckiest_Guy,cursive] text-[17px] tracking-wider text-white rounded-[9px] px-3 py-0.5 shadow-[0_3px_0_rgba(22,35,59,.22)]"
+                    style={{background:"var(--grape)",border:"2px solid var(--ink)",transform:"rotate(-1deg)"}}>Grand Final</span>
+                  <span className="h-[2px] bg-[var(--ink)] opacity-15 flex-1 rounded"/>
+                </div>
+
+                {gfBothKnown&&!champ&&(
+                  <div className="mb-3 inline-flex items-center gap-0 border-2 border-[var(--ink)] rounded-[10px] overflow-hidden shadow-[0_2px_0_rgba(22,35,59,.18)]">
+                    <div className={`flex items-center gap-2 px-3 py-1.5 ${gfScoreA>gfScoreB?"bg-[var(--sun)]":"bg-white"}`}>
+                      <span className="font-[Fredoka] font-bold text-[12px] text-[var(--ink)] max-w-[110px] truncate">{gfA}</span>
+                      <span className="font-[Luckiest_Guy,cursive] text-[20px] text-[var(--ink)] leading-none">{gfScoreA}</span>
+                    </div>
+                    <div className="w-px self-stretch bg-[var(--ink)]"/>
+                    <div className="px-2 py-1.5 bg-[var(--grape)] flex flex-col items-center gap-0">
+                      <span className="font-[Fredoka] font-bold text-[8px] text-white tracking-widest uppercase leading-none">First to</span>
+                      <span className="font-[Luckiest_Guy,cursive] text-[13px] text-white leading-none">2</span>
+                    </div>
+                    <div className="w-px self-stretch bg-[var(--ink)]"/>
+                    <div className={`flex items-center gap-2 px-3 py-1.5 ${gfScoreB>gfScoreA?"bg-[var(--sun)]":"bg-white"}`}>
+                      <span className="font-[Luckiest_Guy,cursive] text-[20px] text-[var(--ink)] leading-none">{gfScoreB}</span>
+                      <span className="font-[Fredoka] font-bold text-[12px] text-[var(--ink)] max-w-[110px] truncate">{gfB}</span>
+                    </div>
+                    <div className="w-px self-stretch bg-[var(--ink)]"/>
+                    <div className="px-2 py-1.5 bg-[#F0F8FF]">
+                      <span className="font-[Fredoka] font-bold text-[8.5px] text-[var(--ink)] tracking-wide leading-tight whitespace-nowrap">WB starts<br/>1–0</span>
+                    </div>
                   </div>
                 )}
-              </div>
-            </section>
+                <div className="flex flex-wrap gap-4 items-center">
+                  <div className="flex flex-col gap-2" style={{width:CARD_W}}>
+                    {gfMatches.map(id=>(
+                      <MatchCard key={id} m={M[id]} onSlotClick={handleSlotClick} label={id==="GF"?"Game 1":"Reset · G2"}
+                        seriesMap={series} format={format} readOnly={isSpectator} onReset={handleResetMatch}/>
+                    ))}
+                    {showReset&&<p className="font-[Nunito] text-[10.5px] font-bold text-[var(--grape-deep)] leading-snug">Lower-bracket forced a reset — one more game decides it.</p>}
+                  </div>
+                  {champ?(
+                    <div className="flex-1 min-w-[220px] rounded-2xl border-[3px] border-[var(--ink)] flex flex-col items-center justify-center gap-3 px-8 py-8 text-center"
+                      style={{background:"radial-gradient(130% 130% at 50% -10%,rgba(255,192,46,.7),rgba(255,192,46,0) 62%),var(--card2)",boxShadow:"0 6px 0 rgba(22,35,59,.22), 0 12px 32px rgba(22,35,59,.12)",animation:"champPop .4s cubic-bezier(.34,1.56,.64,1) both"}}>
+                      <span style={{fontSize:52,lineHeight:1,filter:"drop-shadow(0 4px 0 rgba(22,35,59,.18))",animation:"champBounce 1.8s ease-in-out infinite"}}>🍻</span>
+                      <div>
+                        <div className="font-[Fredoka] tracking-[3px] text-[11px] text-[var(--sun-deep)] font-bold uppercase mb-1">🏆 Champion 🏆</div>
+                        <div className="font-[Luckiest_Guy,cursive] text-[clamp(22px,4vw,34px)] text-[var(--ink)] leading-tight tracking-wide" style={{textShadow:"2px 2px 0 rgba(22,35,59,.1)"}}>{champ.name}</div>
+                      </div>
+                      <div className="font-[Fredoka] font-semibold text-[13px] text-[var(--ink-soft)]">Drinks are on the winner 🍺</div>
+                    </div>
+                  ):(
+                    <div className="flex-1 min-w-[180px] max-w-[240px] rounded-xl border-2 border-dashed border-[var(--ink)] flex flex-col items-center justify-center gap-1.5 px-5 py-4 text-center bg-[#FBF6EA]">
+                      <span className="text-3xl">🏁</span>
+                      <span className="font-[Fredoka] tracking-[2px] text-[9.5px] text-[var(--sun-deep)] font-bold uppercase">Champion</span>
+                      <span className="font-[Fredoka] font-semibold text-[var(--muted)] text-[13px]">To be crowned</span>
+                    </div>
+                  )}
+                </div>
+              </section>
 
-            <div className="flex flex-wrap gap-3 mt-5 pt-3 border-t-2 border-dotted border-[#C9BFA8] font-[Nunito] text-[11px] font-bold text-[var(--ink-soft)]">
-              {([
-                ["rgba(47,185,105,0.45)","var(--grass)","🍄 Winners"],
-                ["rgba(255,90,90,0.45)","var(--coral)","🐢 Losers"],
-                ["rgba(124,92,255,0.45)","var(--grape)","⭐ Grand Final"],
-              ] as [string,string,string][]).map(([bg,border,l])=>(
-                <span key={l} className="flex items-center gap-1"><span className="w-3 h-3 rounded-[3px] border-2" style={{background:bg,borderColor:border}}/>{l}</span>
-              ))}
-              <span>👉 Tap a racer to mark the heat winner. Tap again to undo.</span>
-            </div>
-            <p className="mt-2 font-[Nunito] text-[11px] font-semibold text-[var(--muted)] leading-relaxed">
-              🍌 Finish your drink before crossing the line. First loss → Losers. Second loss → you're out. WB champ starts Grand Final one game up.
-            </p>
-          </>
-        )}
+              {/* Legend */}
+              <div className="flex flex-wrap gap-3 mt-5 pt-3 border-t-2 border-dotted border-[#C9BFA8] font-[Nunito] text-[11px] font-bold text-[var(--ink-soft)]">
+                {([
+                  ["rgba(47,185,105,0.45)","var(--grass)","🍄 Winners"],
+                  ["rgba(255,90,90,0.45)","var(--coral)","🐢 Losers"],
+                  ["rgba(124,92,255,0.45)","var(--grape)","⭐ Grand Final"],
+                ] as [string,string,string][]).map(([bg,border,l])=>(
+                  <span key={l} className="flex items-center gap-1"><span className="w-3 h-3 rounded-[3px] border-2" style={{background:bg,borderColor:border}}/>{l}</span>
+                ))}
+                <span>{isSpectator?"📺 Read-only spectator view":"👉 Tap a racer to mark the heat winner. Tap again to undo."}</span>
+              </div>
+              <p className="mt-2 font-[Nunito] text-[11px] font-semibold text-[var(--muted)] leading-relaxed">
+                🍌 Finish your drink before crossing the line. First loss → Losers. Second loss → you're out. WB champ starts the Grand Final one game up.
+              </p>
+
+              {/* Match history */}
+              <MatchHistory BR={BR} M={M} series={series} groupTitleById={groupTitleById}/>
+            </>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
