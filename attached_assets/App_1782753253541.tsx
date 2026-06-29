@@ -232,8 +232,11 @@ interface ColProps {
   M: Record<string, MatchResult>;
   onSlotClick: (id: string, s: "A"|"B") => void;
   slotH: number;
+  /** Whether to draw connector arms on the right toward the next round */
   rightConn: boolean;
+  /** Whether right connectors include a vertical stem (pairing) */
   rightPair: boolean;
+  /** Whether to draw a horizontal arm on the left (incoming from previous round) */
   leftConn: boolean;
   gfLabels?: Record<string,string>;
 }
@@ -243,6 +246,7 @@ function BracketCol({ids,M,onSlotClick,slotH,rightConn,rightPair,leftConn,gfLabe
   const totalW = CARD_W + (leftConn?CONN_W:0) + (rightConn?CONN_W:0);
   return(
     <div style={{position:"relative",width:totalW,height:totalH,flexShrink:0}}>
+      {/* Cards */}
       {ids.map((id,i)=>{
         const cy=(i+0.5)*slotH;
         return(
@@ -251,14 +255,17 @@ function BracketCol({ids,M,onSlotClick,slotH,rightConn,rightPair,leftConn,gfLabe
           </div>
         );
       })}
+      {/* Left arms */}
       {leftConn&&ids.map((_,i)=>{
         const cy=(i+0.5)*slotH;
         return <div key={i} style={{position:"absolute",left:0,top:cy-1,width:CONN_W,height:2,background:LINE_CLR}}/>;
       })}
+      {/* Right arms */}
       {rightConn&&ids.map((_,i)=>{
         const cy=(i+0.5)*slotH;
         return <div key={i} style={{position:"absolute",right:0,top:cy-1,width:CONN_W,height:2,background:LINE_CLR}}/>;
       })}
+      {/* Right vertical stems (pairing) */}
       {rightConn&&rightPair&&Array.from({length:Math.floor(ids.length/2)},(_,pi)=>{
         const topY=(2*pi+0.5)*slotH, botY=(2*pi+1.5)*slotH;
         return <div key={pi} style={{position:"absolute",right:0,top:topY,width:2,height:botY-topY,background:LINE_CLR}}/>;
@@ -276,8 +283,11 @@ interface SectionProps {
   tagColor: string;
   tagText: string;
   pipColor: string;
+  /** slotH calculator for each group index */
   slotHFor: (i:number)=>number;
+  /** Should group i show right connectors? */
   rightConnFor: (i:number)=>boolean;
+  /** Should right connectors be pairing (with vertical stem)? */
   rightPairFor: (i:number)=>boolean;
 }
 
@@ -316,11 +326,12 @@ function BracketSection({groups,M,onSlotClick,tagColor,tagText,pipColor,slotHFor
 // ─── Beer Mug SVG ─────────────────────────────────────────────────────────────
 
 function BeerMug({pct}:{pct:number}){
+  // inner fill area: y runs from TOP=8 to BOT=62, height=54
   const TOP=8,BOT=62,MUG_H=BOT-TOP;
   const fillH=Math.max(0,(pct/100)*MUG_H);
   const fillY=BOT-fillH;
   const show=fillH>0.5;
-  const FOAM=9;
+  const FOAM=9; // foam height above liquid surface
 
   return(
     <svg viewBox="0 0 56 72" width="44" height="58" style={{flexShrink:0,overflow:"visible"}}>
@@ -330,16 +341,20 @@ function BeerMug({pct}:{pct:number}){
           <stop offset="60%" stopColor="#FFA820"/>
           <stop offset="100%" stopColor="#D4700A"/>
         </linearGradient>
+        {/* clip to mug body */}
         <clipPath id="mugClip">
           <polygon points="5,7 49,7 44,64 10,64"/>
         </clipPath>
+        {/* clip to beer fill area only (for bubbles) */}
         <clipPath id="beerClip">
           <rect x="0" y={fillY} width="56" height={fillH+2}/>
         </clipPath>
       </defs>
 
+      {/* Glass body background */}
       <polygon points="5,7 49,7 44,64 10,64" fill="rgba(200,230,255,0.18)"/>
 
+      {/* Beer fill */}
       {show&&(
         <rect x="0" width="56" clipPath="url(#mugClip)"
           fill="url(#beerGrad)"
@@ -351,6 +366,7 @@ function BeerMug({pct}:{pct:number}){
         />
       )}
 
+      {/* Foam layer + animated bumps */}
       {show&&(
         <g clipPath="url(#mugClip)"
           style={{
@@ -359,16 +375,20 @@ function BeerMug({pct}:{pct:number}){
             animation:"foamOscillate 3.2s ease-in-out infinite",
             transformOrigin:"27px 0px",
           }}>
+          {/* foam body rect */}
           <rect x="0" y="0" width="56" height={FOAM+4} fill="white" opacity="0.96"/>
+          {/* bumpy top edge — row of overlapping circles */}
           {[6,11,16,21,26,31,36,41,46].map((cx,i)=>(
             <circle key={i} cx={cx} cy={1} r={5} fill="white" opacity="0.95"/>
           ))}
+          {/* second smaller row for depth */}
           {[3,9,15,21,27,33,39,45].map((cx,i)=>(
             <circle key={i} cx={cx} cy={-2} r={3.2} fill="white" opacity="0.7"/>
           ))}
         </g>
       )}
 
+      {/* Rising bubbles — clipped to beer fill */}
       {show&&fillH>12&&(
         <g clipPath="url(#mugClip)">
           <circle cx="21" cy={BOT-6} r="2.2" fill="rgba(255,255,255,0.55)"
@@ -380,12 +400,18 @@ function BeerMug({pct}:{pct:number}){
         </g>
       )}
 
+      {/* Mug outline */}
       <polygon points="5,7 49,7 44,64 10,64"
         fill="none" stroke="#16233B" strokeWidth="2.5" strokeLinejoin="round"/>
+
+      {/* Handle */}
       <path d="M 49 22 C 62 22 62 52 49 52"
         fill="none" stroke="#16233B" strokeWidth="3" strokeLinecap="round"/>
+      {/* Handle inner line for thickness */}
       <path d="M 49 27 C 57 27 57 47 49 47"
         fill="rgba(255,255,255,0.4)" stroke="#16233B" strokeWidth="1.5" strokeLinecap="round"/>
+
+      {/* Rim line */}
       <line x1="5" y1="7" x2="49" y2="7" stroke="#16233B" strokeWidth="2.5" strokeLinecap="round"/>
     </svg>
   );
@@ -438,6 +464,7 @@ function RulesModal({onClose}:{onClose:()=>void}){
       onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
       <div className="relative w-full max-w-lg max-h-[85vh] flex flex-col bg-[var(--foam)] border-[3px] border-[var(--ink)] rounded-[18px] shadow-[0_8px_0_rgba(22,35,59,.3)]"
         style={{overflowY:"auto"}}>
+        {/* Header */}
         <div className="sticky top-0 z-10 bg-[var(--sun)] border-b-[3px] border-[var(--ink)] px-5 py-3 flex items-center justify-between rounded-t-[15px]">
           <div>
             <h2 className="font-[Luckiest_Guy,cursive] text-[22px] text-[var(--ink)] leading-none tracking-wider m-0"
@@ -453,6 +480,7 @@ function RulesModal({onClose}:{onClose:()=>void}){
             ✕
           </button>
         </div>
+        {/* Rules list */}
         <div className="px-5 py-4 flex flex-col gap-3">
           {RULES.map((r,i)=>(
             <div key={i} className="flex gap-3 bg-white border-2 border-[var(--ink)] rounded-[12px] p-3 shadow-[0_2px_0_rgba(22,35,59,.1)]">
@@ -536,24 +564,32 @@ export default function App(){
   const gfMatches=M["GF2"]&&M["GF2"].active?["GF","GF2"]:["GF"];
   const showReset=M["GF"]?.decided&&M["GF"]?.winSlot==="B"&&!(M["GF2"]?.decided);
 
+  // Grand Final score — WB champ always starts 1-0
   const gfMatch=M["GF"];
   const gfA=gfMatch?.a!==TBD&&gfMatch?.a!==BYE&&gfMatch?.a?(gfMatch.a as Player).name??null:null;
   const gfB=gfMatch?.b!==TBD&&gfMatch?.b!==BYE&&gfMatch?.b?(gfMatch.b as Player).name??null:null;
   const gfBothKnown=!!(gfA&&gfB);
-  let gfScoreA=1,gfScoreB=0;
+  let gfScoreA=1,gfScoreB=0; // WB starts 1-0
   if(gfMatch?.decided){
     if(gfMatch.winSlot==="A")gfScoreA++;
     else gfScoreB++;
   }
 
+  // WB connector rules:
+  // All WB rounds except last have right connectors with pairing
   const wbRightConn=(i:number)=>i<wbGroups.length-1;
   const wbRightPair=(_i:number)=>true;
+
+  // LB connector rules:
+  // LB groups: 0=minor, 1=major, 2=minor, 3=major, ...
+  // Right connectors with pairing on odd-indexed groups (major) that precede a minor group
   const lbRightConn=(i:number)=>i%2===1&&i<lbGroups.length-1;
   const lbRightPair=(_i:number)=>true;
 
   return(
     <div className="min-h-screen">
       {rulesOpen&&<RulesModal onClose={()=>setRulesOpen(false)}/>}
+      {/* Header */}
       <header className="relative border-b-[3px] border-[var(--ink)] overflow-hidden" style={{
         background:`url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 180' preserveAspectRatio='none'%3E%3Cg fill='%23FFFFFF'%3E%3Cellipse cx='170' cy='44' rx='72' ry='26'/%3E%3Cellipse cx='232' cy='36' rx='46' ry='22'/%3E%3Cellipse cx='1080' cy='50' rx='88' ry='32'/%3E%3Cellipse cx='1160' cy='38' rx='58' ry='24'/%3E%3C/g%3E%3C/svg%3E") no-repeat top/100%,linear-gradient(180deg,var(--sky-top) 0%,var(--sky-bot) 78%)`}}>
         <div className="h-3" style={{backgroundImage:"linear-gradient(45deg,#16233B 25%,transparent 25%),linear-gradient(-45deg,#16233B 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#16233B 75%),linear-gradient(-45deg,transparent 75%,#16233B 75%)",backgroundSize:"12px 12px",backgroundPosition:"0 0,0 6px,6px -6px,-6px 0",backgroundColor:"#FFF",borderBottom:"2.5px solid var(--ink)"}}/>
@@ -574,17 +610,18 @@ export default function App(){
               className="w-9 h-9 rounded-[10px] border-2 border-[var(--ink)] bg-[var(--foam)] text-[var(--ink)] font-[Fredoka] font-bold text-[15px] grid place-items-center shadow-[0_3px_0_rgba(22,35,59,.22)] hover:bg-white active:translate-y-px transition-all cursor-pointer flex-shrink-0">
               ℹ️
             </button>
-            <div className="flex items-center gap-3.5 bg-[var(--foam)] border-2 border-[var(--ink)] rounded-[11px] px-3 py-2 shadow-[0_3px_0_rgba(22,35,59,.18)]">
-              <BeerMug pct={pct}/>
-              <div className="font-[Fredoka]">
-                <div className="text-[19px] font-bold text-[var(--ink)] leading-none">{done} / {playable}</div>
-                <div className="text-[10px] text-[var(--ink-soft)] tracking-widest font-semibold mt-0.5">🍄 Heats Run</div>
-              </div>
+          <div className="flex items-center gap-3.5 bg-[var(--foam)] border-2 border-[var(--ink)] rounded-[11px] px-3 py-2 shadow-[0_3px_0_rgba(22,35,59,.18)]">
+            <BeerMug pct={pct}/>
+            <div className="font-[Fredoka]">
+              <div className="text-[19px] font-bold text-[var(--ink)] leading-none">{done} / {playable}</div>
+              <div className="text-[10px] text-[var(--ink-soft)] tracking-widest font-semibold mt-0.5">🍄 Heats Run</div>
             </div>
+          </div>
           </div>
         </div>
       </header>
 
+      {/* Controls */}
       <div className="max-w-[1360px] mx-auto px-4 py-3.5 flex flex-wrap gap-5 items-start">
         <div className="flex-1 min-w-[260px]">
           <div className="font-[Fredoka] font-bold text-[13.5px] text-[var(--ink)] mb-2 flex items-center gap-2.5 flex-wrap">
@@ -621,6 +658,7 @@ export default function App(){
         </div>
       </div>
 
+      {/* Stage */}
       <div className="max-w-[1360px] mx-auto px-4 pb-12">
         {realCount<2?(
           <div className="mt-6 border-2 border-dashed border-[var(--ink)] rounded-[14px] p-10 text-center bg-[#FBF6EA]">
@@ -642,6 +680,7 @@ export default function App(){
                 rightConnFor={lbRightConn} rightPairFor={lbRightPair}/>
             )}
 
+            {/* Grand Final */}
             <section className="mt-5">
               <div className="flex items-center gap-3 mb-2.5">
                 <span className="w-3 h-3 border-2 border-[var(--ink)] rotate-45 rounded-sm" style={{background:"var(--grape)"}}/>
@@ -650,22 +689,29 @@ export default function App(){
                 <span className="h-[2px] bg-[var(--ink)] opacity-15 flex-1 rounded"/>
               </div>
 
+              {/* Score strip — only when both finalists are known */}
               {gfBothKnown&&!champ&&(
                 <div className="mb-3 inline-flex items-center gap-0 border-2 border-[var(--ink)] rounded-[10px] overflow-hidden shadow-[0_2px_0_rgba(22,35,59,.18)]">
+                  {/* WB side */}
                   <div className={`flex items-center gap-2 px-3 py-1.5 ${gfScoreA>gfScoreB?"bg-[var(--sun)]":"bg-white"}`}>
                     <span className="font-[Fredoka] font-bold text-[12px] text-[var(--ink)] max-w-[110px] truncate">{gfA}</span>
                     <span className="font-[Luckiest_Guy,cursive] text-[20px] text-[var(--ink)] leading-none">{gfScoreA}</span>
                   </div>
+                  {/* Divider */}
                   <div className="w-px self-stretch bg-[var(--ink)]"/>
+                  {/* Center label */}
                   <div className="px-2 py-1.5 bg-[var(--grape)] flex flex-col items-center gap-0">
                     <span className="font-[Fredoka] font-bold text-[8px] text-white tracking-widest uppercase leading-none">Best of</span>
                     <span className="font-[Luckiest_Guy,cursive] text-[13px] text-white leading-none">3</span>
                   </div>
+                  {/* Divider */}
                   <div className="w-px self-stretch bg-[var(--ink)]"/>
+                  {/* LB side */}
                   <div className={`flex items-center gap-2 px-3 py-1.5 ${gfScoreB>gfScoreA?"bg-[var(--sun)]":"bg-white"}`}>
                     <span className="font-[Luckiest_Guy,cursive] text-[20px] text-[var(--ink)] leading-none">{gfScoreB}</span>
                     <span className="font-[Fredoka] font-bold text-[12px] text-[var(--ink)] max-w-[110px] truncate">{gfB}</span>
                   </div>
+                  {/* WB badge */}
                   <div className="w-px self-stretch bg-[var(--ink)]"/>
                   <div className="px-2 py-1.5 bg-[#F0F8FF]">
                     <span className="font-[Fredoka] font-bold text-[8.5px] text-[var(--ink)] tracking-wide leading-tight whitespace-nowrap">WB<br/>+1</span>
@@ -680,6 +726,7 @@ export default function App(){
                   {showReset&&<p className="font-[Nunito] text-[10.5px] font-bold text-[var(--grape-deep)] leading-snug">Lower-bracket forced a reset — one more game decides it.</p>}
                 </div>
                 {champ ? (
+                  /* ── Big winner card ── */
                   <div className="flex-1 min-w-[220px] rounded-2xl border-[3px] border-[var(--ink)] flex flex-col items-center justify-center gap-3 px-8 py-8 text-center"
                     style={{
                       background:"radial-gradient(130% 130% at 50% -10%,rgba(255,192,46,.7),rgba(255,192,46,0) 62%),var(--card2)",
@@ -698,6 +745,7 @@ export default function App(){
                     </div>
                   </div>
                 ) : (
+                  /* ── Waiting card ── */
                   <div className="flex-1 min-w-[180px] max-w-[240px] rounded-xl border-2 border-dashed border-[var(--ink)] flex flex-col items-center justify-center gap-1.5 px-5 py-4 text-center bg-[#FBF6EA]">
                     <span className="text-3xl">🏁</span>
                     <span className="font-[Fredoka] tracking-[2px] text-[9.5px] text-[var(--sun-deep)] font-bold uppercase">Champion</span>
@@ -707,6 +755,7 @@ export default function App(){
               </div>
             </section>
 
+            {/* Legend */}
             <div className="flex flex-wrap gap-3 mt-5 pt-3 border-t-2 border-dotted border-[#C9BFA8] font-[Nunito] text-[11px] font-bold text-[var(--ink-soft)]">
               {([
                 ["rgba(47,185,105,0.45)","var(--grass)","🍄 Winners"],
