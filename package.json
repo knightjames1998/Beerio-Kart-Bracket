@@ -7,7 +7,7 @@
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
-    "build:web": "cd artifacts/beerio-kart && PORT=5000 BASE_PATH=/ vite build --config vite.config.ts",
+    "build:web": "PORT=5000 BASE_PATH=/ pnpm --filter @workspace/beerio-kart run build",
     "build:api": "pnpm --filter @workspace/api-server run build",
     "build:all": "pnpm run build:web && pnpm run build:api",
     "start": "node --enable-source-maps artifacts/api-server/dist/index.mjs",

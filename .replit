@@ -3,6 +3,8 @@ modules = ["nodejs-24"]
 [deployment]
 router = "application"
 deploymentTarget = "autoscale"
+build = ["sh", "-c", "pnpm install && pnpm run build:all && pnpm --filter @workspace/db run push"]
+run = ["pnpm", "run", "start"]
 
 [deployment.postBuild]
 args = ["pnpm", "store", "prune"]
@@ -18,3 +20,6 @@ expertMode = true
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
+
+[nix]
+packages = ["zip"]
