@@ -14,8 +14,7 @@
   --ink-soft: #41506B;
   --sky-top: #74CEFF;
   --sky-bot: #BFEAFF;
-  --cream: #FBF4E2;        /* lighter warm paper */
-  --paper-grid: rgba(22,35,59,0.05);
+  --cream: #FFF6E6;
   --card: #FFFFFF;
   --card2: #FFF1D8;
   --sun: #FFC02E;
@@ -46,10 +45,8 @@ html, body {
 
 body {
   background:
-    linear-gradient(var(--paper-grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--paper-grid) 1px, transparent 1px),
+    repeating-linear-gradient(116deg, rgba(22,35,59,0.022) 0 2px, transparent 2px 24px),
     var(--cream);
-  background-size: 22px 22px, 22px 22px, auto;
   color: var(--ink);
   font-family: 'Nunito', system-ui, sans-serif;
   min-height: 100vh;
@@ -130,34 +127,4 @@ button, [role="button"], input { touch-action: manipulation; }
 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; }
-}
-
-/* ─── Coin-Op: pixel helper + attention animations ─────────────────── */
-.px { font-family: 'Press Start 2P', monospace; }
-
-/* Victor celebration: plays when the champion block mounts (final decided) */
-.victor-celebrate {
-  animation: victorPop .55s cubic-bezier(.34,1.56,.64,1) both,
-             victorGlow 1.4s ease-in-out .55s infinite;
-}
-@keyframes victorPop {
-  0%   { opacity:0; transform: scale(.5) rotate(-8deg); }
-  55%  { opacity:1; transform: scale(1.12) rotate(3deg); }
-  75%  { transform: scale(.97) rotate(-1deg); }
-  100% { transform: scale(1) rotate(0); }
-}
-@keyframes victorGlow {
-  0%,100% { box-shadow: 5px 5px 0 var(--ink), 0 0 0 0 rgba(255,192,46,.55); }
-  50%     { box-shadow: 5px 5px 0 var(--ink), 0 0 0 14px rgba(255,192,46,0); }
-}
-
-/* Grand Final focus: pulses + lifts once both racers are in */
-.gf-focus { animation: gfPulse 1.5s ease-in-out infinite; }
-@keyframes gfPulse {
-  0%,100% { box-shadow: 3px 3px 0 var(--ink), 0 0 0 0 rgba(255,192,46,.6); }
-  50%     { box-shadow: 3px 3px 0 var(--ink), 0 0 0 8px rgba(255,192,46,0); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .victor-celebrate, .gf-focus { animation: none !important; }
 }

@@ -265,7 +265,7 @@ function SlotRow({m,slot,onClick,wins,target,readOnly}:{
     <button disabled={!clickable} onClick={()=>clickable&&onClick(m.def.id,slot)}
       style={{background:bg,touchAction:"manipulation"}}
       className={[
-        "w-full flex items-center gap-1.5 px-2 py-[5px] rounded-[2px] border-[3px] border-[var(--ink)]",
+        "w-full flex items-center gap-1.5 px-2 py-[5px] rounded-[6px] border border-[var(--ink)]",
         "font-[Nunito] text-[11.5px] font-bold text-left transition-all",
         isWin?"text-white":"text-[var(--ink)]",
         isLose?"opacity-50":"",
@@ -274,7 +274,7 @@ function SlotRow({m,slot,onClick,wins,target,readOnly}:{
         clickable?"hover:brightness-105 hover:-translate-y-px active:translate-y-0 cursor-pointer":"cursor-default",
       ].join(" ")}
     >
-      <span className={["inline-grid place-items-center min-w-[15px] h-[15px] rounded-[2px] text-[9.5px] font-bold flex-shrink-0 leading-none",
+      <span className={["inline-grid place-items-center min-w-[15px] h-[15px] rounded-[3px] text-[9.5px] font-bold flex-shrink-0 leading-none",
         isWin?"bg-black/20 text-white":"bg-[var(--ink-soft)] text-white",
         isTbd||isBye?"!bg-[#C3CAD6]":""].join(" ")}>{isTbd||isBye?"·":player?.seed}</span>
       <span className={["flex-1 overflow-hidden text-ellipsis whitespace-nowrap leading-none",isLose?"line-through decoration-[var(--coral)] decoration-[1.5px]":""].join(" ")}>
@@ -283,7 +283,7 @@ function SlotRow({m,slot,onClick,wins,target,readOnly}:{
       {target>1&&isPlayer&&(
         <span className="flex gap-[2px] items-center flex-shrink-0">
           {Array.from({length:target}).map((_,i)=>(
-            <span key={i} className="w-[5px] h-[5px] rounded-[2px] border"
+            <span key={i} className="w-[5px] h-[5px] rounded-full border"
               style={{borderColor:isWin?"rgba(255,255,255,.85)":"var(--ink)",
                 background:i<wins?(isWin?"#fff":"var(--ink)"):"transparent"}}/>
           ))}
@@ -302,14 +302,12 @@ function MatchCard({m,onSlotClick,label,seriesMap,format,readOnly,onReset}:{
   const target=targetFor(m.def,format);
   const sv=seriesMap[m.def.id]||{a:0,b:0};
   const showReset=!readOnly&&target>1&&!m.auto&&(sv.a+sv.b>0);
-  const isGF=m.def.id==="GF"||m.def.id==="GF2";
-  const bothPicked=isGF&&m.a!==TBD&&m.a!==BYE&&m.b!==TBD&&m.b!==BYE;
   return(
-    <div style={{height:CARD_H,...(bothPicked?{transform:"scale(1.06)",zIndex:5,position:"relative" as const}:{})}}
-      className={["bg-white border-[3px] border-[var(--ink)] rounded-[2px] p-1.5 flex flex-col justify-between transition-transform",
-        "shadow-[3px_3px_0_var(--ink)]",bothPicked?"gf-focus":"",m.phantom?"opacity-40":""].join(" ")}>
+    <div style={{height:CARD_H}}
+      className={["bg-white border border-[var(--ink)] rounded-[9px] p-1.5 flex flex-col justify-between",
+        "shadow-[0_2px_0_rgba(22,35,59,.13)]",m.phantom?"opacity-40":""].join(" ")}>
       <div className="flex items-center justify-between gap-1">
-        <span className="font-[Fredoka] font-bold text-[9.5px] tracking-wide text-[var(--ink)] bg-[#F5EFE0] border-[3px] border-[var(--ink)] rounded-[2px] px-1 py-px leading-none">{lbl}</span>
+        <span className="font-[Fredoka] font-bold text-[9.5px] tracking-wide text-[var(--ink)] bg-[#F5EFE0] border border-[var(--ink)] rounded-[3px] px-1 py-px leading-none">{lbl}</span>
         <div className="flex items-center gap-1 min-w-0">
           {m.def.drop&&<span className="font-[Nunito] text-[8.5px] font-bold text-[var(--muted)] leading-none truncate max-w-[78px]">{m.def.drop}</span>}
           {showReset&&(
@@ -321,7 +319,7 @@ function MatchCard({m,onSlotClick,label,seriesMap,format,readOnly,onReset}:{
       </div>
       <SlotRow m={m} slot="A" onClick={onSlotClick} wins={sv.a} target={target} readOnly={readOnly}/>
       <div className="flex justify-center">
-        <span className="font-[Fredoka] text-[8.5px] font-bold text-[var(--ink)] bg-[var(--sun)] border-[3px] border-[var(--ink)] rounded-[2px] px-1.5 leading-none py-px" style={{transform:"rotate(-2deg)"}}>{icon} vs</span>
+        <span className="font-[Fredoka] text-[8.5px] font-bold text-[var(--ink)] bg-[var(--sun)] border border-[var(--ink)] rounded-full px-1.5 leading-none py-px" style={{transform:"rotate(-2deg)"}}>{icon} vs</span>
       </div>
       <SlotRow m={m} slot="B" onClick={onSlotClick} wins={sv.b} target={target} readOnly={readOnly}/>
     </div>
@@ -380,8 +378,8 @@ function BracketSection({groups,M,onSlotClick,tagColor,tagText,pipColor,slotHFor
   return(
     <section className="mt-5">
       <div className="flex items-center gap-3 mb-2.5">
-        <span className="w-3 h-3 border-[3px] border-[var(--ink)] rotate-45 rounded-[2px] flex-shrink-0" style={{background:pipColor}}/>
-        <span className="font-[Press_Start_2P,monospace] text-[10px] tracking-wider text-white rounded-[2px] px-3 py-0.5 shadow-[3px_3px_0_var(--ink)] flex-shrink-0"
+        <span className="w-3 h-3 border-2 border-[var(--ink)] rotate-45 rounded-sm flex-shrink-0" style={{background:pipColor}}/>
+        <span className="font-[Luckiest_Guy,cursive] text-[17px] tracking-wider text-white rounded-[9px] px-3 py-0.5 shadow-[0_3px_0_rgba(22,35,59,.22)] flex-shrink-0"
           style={{background:tagColor,border:"2px solid var(--ink)",transform:"rotate(-1deg)"}}>{tagText}</span>
         <span className="h-[2px] bg-[var(--ink)] opacity-15 flex-1 rounded"/>
       </div>
@@ -472,7 +470,7 @@ function RulesModal({onClose}:{onClose:()=>void}){
     <ModalShell onClose={onClose} title="🍺 BEERIO KART RULES" subtitle="Read before you race. Seriously.">
       <div className="px-5 py-4 flex flex-col gap-3">
         {RULES.map((r,i)=>(
-          <div key={i} className="flex gap-3 bg-white border-[3px] border-[var(--ink)] rounded-[2px] p-3 shadow-[3px_3px_0_var(--ink)]">
+          <div key={i} className="flex gap-3 bg-white border-2 border-[var(--ink)] rounded-[12px] p-3 shadow-[0_2px_0_rgba(22,35,59,.1)]">
             <span className="text-2xl flex-shrink-0 mt-0.5">{r.icon}</span>
             <div>
               <div className="font-[Fredoka] font-bold text-[14px] text-[var(--ink)] leading-tight mb-1">{r.title}</div>
@@ -491,13 +489,13 @@ function ModalShell({title,subtitle,onClose,children}:{title:string;subtitle?:st
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{background:"rgba(22,35,59,0.6)",backdropFilter:"blur(4px)"}}
       onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
-      <div className="relative w-full max-w-lg max-h-[85vh] flex flex-col bg-[var(--foam)] border-[3px] border-[var(--ink)] rounded-[2px] shadow-[5px_5px_0_var(--ink)]" style={{overflowY:"auto"}}>
-        <div className="sticky top-0 z-10 bg-[var(--sun)] border-b-[3px] border-[var(--ink)] px-5 py-3 flex items-center justify-between rounded-t-[2px]">
+      <div className="relative w-full max-w-lg max-h-[85vh] flex flex-col bg-[var(--foam)] border-[3px] border-[var(--ink)] rounded-[18px] shadow-[0_8px_0_rgba(22,35,59,.3)]" style={{overflowY:"auto"}}>
+        <div className="sticky top-0 z-10 bg-[var(--sun)] border-b-[3px] border-[var(--ink)] px-5 py-3 flex items-center justify-between rounded-t-[15px]">
           <div>
-            <h2 className="font-[Press_Start_2P,monospace] text-[12px] text-[var(--ink)] leading-[1.5] tracking-wider m-0" style={{textShadow:"2px 2px 0 rgba(22,35,59,.15)"}}>{title}</h2>
+            <h2 className="font-[Luckiest_Guy,cursive] text-[20px] text-[var(--ink)] leading-none tracking-wider m-0" style={{textShadow:"2px 2px 0 rgba(22,35,59,.15)"}}>{title}</h2>
             {subtitle&&<p className="font-[Fredoka] font-semibold text-[11px] text-[var(--ink)] opacity-70 mt-0.5 m-0 tracking-wide">{subtitle}</p>}
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-[2px] border-[3px] border-[var(--ink)] bg-white text-[var(--ink)] font-bold text-lg grid place-items-center shadow-[3px_3px_0_var(--ink)] hover:bg-[#F5EFE0] active:translate-y-px transition-all cursor-pointer" style={{touchAction:"manipulation"}}>✕</button>
+          <button onClick={onClose} className="w-8 h-8 rounded-[8px] border-2 border-[var(--ink)] bg-white text-[var(--ink)] font-bold text-lg grid place-items-center shadow-[0_2px_0_rgba(22,35,59,.22)] hover:bg-[#F5EFE0] active:translate-y-px transition-all cursor-pointer" style={{touchAction:"manipulation"}}>✕</button>
         </div>
         {children}
       </div>
@@ -523,7 +521,7 @@ function FormatModal({format,onChange,onClose}:{format:Format;onChange:(f:Partia
   ];
   const Row=({active,onClick,icon,label,sub}:{active:boolean;onClick:()=>void;icon?:string;label:string;sub:string})=>(
     <button onClick={onClick} style={{touchAction:"manipulation"}}
-      className={`flex items-center justify-between text-left px-3 py-2 rounded-[2px] border-[3px] border-[var(--ink)] cursor-pointer transition-all ${active?"bg-[var(--sun)] shadow-[3px_3px_0_var(--ink)]":"bg-white hover:bg-[#F5EFE0]"}`}>
+      className={`flex items-center justify-between text-left px-3 py-2 rounded-[10px] border-2 border-[var(--ink)] cursor-pointer transition-all ${active?"bg-[var(--sun)] shadow-[0_2px_0_rgba(22,35,59,.22)]":"bg-white hover:bg-[#F5EFE0]"}`}>
       <span className="flex items-center gap-2">
         {icon&&<span className="text-[17px]">{icon}</span>}
         <span><span className="font-[Fredoka] font-bold text-[13px] text-[var(--ink)]">{label}</span><span className="block font-[Nunito] text-[11px] font-semibold text-[var(--muted)]">{sub}</span></span>
@@ -578,9 +576,9 @@ function CopyRow({value,id,copied,onCopy}:{value:string;id:"live"|"snap";copied:
   return(
     <div className="w-full flex items-center gap-2">
       <input readOnly value={value} onFocus={e=>e.currentTarget.select()}
-        className="flex-1 min-w-0 px-2.5 py-2 bg-white border-[3px] border-[var(--ink)] rounded-[2px] font-[Nunito] text-[11px] font-semibold text-[var(--ink-soft)] outline-none truncate"/>
+        className="flex-1 min-w-0 px-2.5 py-2 bg-white border-2 border-[var(--ink)] rounded-[9px] font-[Nunito] text-[11px] font-semibold text-[var(--ink-soft)] outline-none truncate"/>
       <button onClick={()=>onCopy(id,value)} style={{touchAction:"manipulation"}}
-        className="flex-shrink-0 px-3 py-2 rounded-[2px] border-[3px] border-[var(--ink)] bg-[var(--sun)] hover:bg-[var(--sun-deep)] font-[Fredoka] font-semibold text-[12px] text-[var(--ink)] shadow-[3px_3px_0_var(--ink)] active:translate-y-px transition-all cursor-pointer">
+        className="flex-shrink-0 px-3 py-2 rounded-[9px] border-2 border-[var(--ink)] bg-[var(--sun)] hover:bg-[var(--sun-deep)] font-[Fredoka] font-semibold text-[12px] text-[var(--ink)] shadow-[0_2px_0_rgba(22,35,59,.22)] active:translate-y-px transition-all cursor-pointer">
         {copied===id?"Copied!":"Copy"}
       </button>
     </div>
@@ -610,7 +608,7 @@ function ShareModal({code,status,liveUrl,snapshotUrl,onClose,onRetry}:{
               Couldn't reach the live server. Make sure the app is running with its API server (see setup notes), or use the one-time snapshot link below.
             </p>
             <button onClick={onRetry} style={{touchAction:"manipulation"}}
-              className="px-4 py-2 rounded-[2px] border-[3px] border-[var(--ink)] bg-[var(--sun)] hover:bg-[var(--sun-deep)] font-[Fredoka] font-semibold text-[12.5px] text-[var(--ink)] shadow-[3px_3px_0_var(--ink)] active:translate-y-px transition-all cursor-pointer">
+              className="px-4 py-2 rounded-[9px] border-2 border-[var(--ink)] bg-[var(--sun)] hover:bg-[var(--sun-deep)] font-[Fredoka] font-semibold text-[12.5px] text-[var(--ink)] shadow-[0_2px_0_rgba(22,35,59,.22)] active:translate-y-px transition-all cursor-pointer">
               Try again
             </button>
           </div>
@@ -618,10 +616,10 @@ function ShareModal({code,status,liveUrl,snapshotUrl,onClose,onRetry}:{
         {code&&(
           <>
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-[2px]" style={{background:status==="live"?"var(--grass)":"var(--coral)",boxShadow:"0 0 0 2px rgba(22,35,59,.15)"}}/>
+              <span className="w-2.5 h-2.5 rounded-full" style={{background:status==="live"?"var(--grass)":"var(--coral)",boxShadow:"0 0 0 2px rgba(22,35,59,.15)"}}/>
               <span className="font-[Fredoka] font-bold text-[12.5px] text-[var(--ink)] tracking-wide">{status==="live"?"LIVE":"reconnecting…"} · Room {code}</span>
             </div>
-            <div className="bg-white border-[3px] border-[var(--ink)] rounded-[2px] p-3 shadow-[3px_3px_0_var(--ink)]">
+            <div className="bg-white border-[3px] border-[var(--ink)] rounded-[14px] p-3 shadow-[0_3px_0_rgba(22,35,59,.18)]">
               <QRCodeSVG value={liveUrl} size={196} bgColor="#FFFFFF" fgColor="#16233B" level="M" includeMargin={false}/>
             </div>
             <p className="font-[Nunito] text-[12px] font-semibold text-[var(--muted)] text-center leading-relaxed m-0">
@@ -665,9 +663,9 @@ function MatchHistory({BR,M,series,groupTitleById}:{BR:Bracket;M:Record<string,M
       {open&&(
         <div className="mt-2 flex flex-col gap-1.5">
           {rows.map((r,i)=>(
-            <div key={r.id} className="flex items-center gap-2 bg-white border-[3px] border-[var(--ink)] rounded-[2px] px-2.5 py-1.5 shadow-[3px_3px_0_var(--ink)]">
+            <div key={r.id} className="flex items-center gap-2 bg-white border border-[var(--ink)] rounded-[8px] px-2.5 py-1.5 shadow-[0_1px_0_rgba(22,35,59,.1)]">
               <span className="font-[Fredoka] font-bold text-[9px] text-[var(--ink-soft)] w-5 flex-shrink-0">{i+1}</span>
-              <span className="font-[Fredoka] font-bold text-[9.5px] text-[var(--ink)] bg-[#F5EFE0] border-[3px] border-[var(--ink)] rounded-[2px] px-1.5 py-px leading-none flex-shrink-0 min-w-[92px]">{r.round}</span>
+              <span className="font-[Fredoka] font-bold text-[9.5px] text-[var(--ink)] bg-[#F5EFE0] border border-[var(--ink)] rounded-[3px] px-1.5 py-px leading-none flex-shrink-0 min-w-[92px]">{r.round}</span>
               <span className="font-[Nunito] text-[12px] font-bold text-[var(--ink)] flex-1 min-w-0 truncate">
                 <span className="text-[var(--grass-deep)]">{r.winner}</span>
                 <span className="text-[var(--muted)] font-semibold"> def. </span>
@@ -726,7 +724,7 @@ function GrandPrix({names,realCount,gpLog,target,readOnly,onRecord,onUndo}:{
       {logOpen&&(
         <div className="mt-2 flex flex-col gap-1.5">
           {gpLog.map((race,i)=>(
-            <div key={i} className="flex items-center gap-2 bg-white border-[3px] border-[var(--ink)] rounded-[2px] px-2.5 py-1.5 shadow-[3px_3px_0_var(--ink)]">
+            <div key={i} className="flex items-center gap-2 bg-white border border-[var(--ink)] rounded-[8px] px-2.5 py-1.5 shadow-[0_1px_0_rgba(22,35,59,.1)]">
               <span className="font-[Fredoka] font-bold text-[9px] text-[var(--ink-soft)] w-10 flex-shrink-0">Heat {i+1}</span>
               <span className="font-[Nunito] text-[11.5px] font-bold text-[var(--ink)] flex-1 min-w-0 truncate">
                 {race.map((seed,pos)=>(
@@ -746,8 +744,8 @@ function GrandPrix({names,realCount,gpLog,target,readOnly,onRecord,onUndo}:{
   return(
     <section className="mt-5">
       <div className="flex items-center gap-3 mb-3">
-        <span className="w-3 h-3 border-[3px] border-[var(--ink)] rotate-45 rounded-[2px] flex-shrink-0" style={{background:"var(--grape)"}}/>
-        <span className="font-[Press_Start_2P,monospace] text-[10px] tracking-wider text-white rounded-[2px] px-3 py-0.5 shadow-[3px_3px_0_var(--ink)] flex-shrink-0"
+        <span className="w-3 h-3 border-2 border-[var(--ink)] rotate-45 rounded-sm flex-shrink-0" style={{background:"var(--grape)"}}/>
+        <span className="font-[Luckiest_Guy,cursive] text-[17px] tracking-wider text-white rounded-[9px] px-3 py-0.5 shadow-[0_3px_0_rgba(22,35,59,.22)] flex-shrink-0"
           style={{background:"var(--grape)",border:"2px solid var(--ink)",transform:"rotate(-1deg)"}}>Grand Prix</span>
         <span className="font-[Fredoka] font-bold text-[12px] text-[var(--ink-soft)] flex-shrink-0">Heat {Math.min(done+ (complete?0:1),total)} of {total}</span>
         <span className="h-[2px] bg-[var(--ink)] opacity-15 flex-1 rounded"/>
@@ -757,19 +755,19 @@ function GrandPrix({names,realCount,gpLog,target,readOnly,onRecord,onUndo}:{
         {/* Current heat / champion */}
         <div className="flex-1 min-w-[280px]">
           {complete?(
-            <div className="victor-celebrate rounded-[2px] border-[3px] border-[var(--ink)] flex flex-col items-center justify-center gap-3 px-8 py-8 text-center"
-              style={{background:"radial-gradient(130% 130% at 50% -10%,rgba(255,192,46,.7),rgba(255,192,46,0) 62%),var(--card2)"}}>
+            <div className="rounded-2xl border-[3px] border-[var(--ink)] flex flex-col items-center justify-center gap-3 px-8 py-8 text-center"
+              style={{background:"radial-gradient(130% 130% at 50% -10%,rgba(255,192,46,.7),rgba(255,192,46,0) 62%),var(--card2)",boxShadow:"0 6px 0 rgba(22,35,59,.22), 0 12px 32px rgba(22,35,59,.12)",animation:"champPop .4s cubic-bezier(.34,1.56,.64,1) both"}}>
               <span style={{fontSize:52,lineHeight:1,filter:"drop-shadow(0 4px 0 rgba(22,35,59,.18))",animation:"champBounce 1.8s ease-in-out infinite"}}>🍻</span>
               <div>
-                <div className="font-[Press_Start_2P,monospace] tracking-[2px] text-[9px] text-[var(--sun-deep)] uppercase mb-2 leading-[1.5]">🏆 Grand Prix Champion 🏆</div>
-                <div className="font-[Press_Start_2P,monospace] text-[clamp(14px,2.6vw,20px)] text-[var(--ink)] leading-[1.4] tracking-wide break-words" style={{textShadow:"2px 2px 0 rgba(22,35,59,.1)"}}>{nameOf(standings[0].seed)}</div>
+                <div className="font-[Fredoka] tracking-[3px] text-[11px] text-[var(--sun-deep)] font-bold uppercase mb-1">🏆 Grand Prix Champion 🏆</div>
+                <div className="font-[Luckiest_Guy,cursive] text-[clamp(22px,4vw,34px)] text-[var(--ink)] leading-tight tracking-wide" style={{textShadow:"2px 2px 0 rgba(22,35,59,.1)"}}>{nameOf(standings[0].seed)}</div>
                 <div className="font-[Fredoka] font-semibold text-[13px] text-[var(--ink-soft)] mt-1">{standings[0].points} pts over {standings[0].races} heats</div>
               </div>
               {!readOnly&&<button onClick={onUndo} style={{touchAction:"manipulation"}}
-                className="font-[Fredoka] font-semibold text-[12px] bg-white text-[var(--ink)] border-[3px] border-[var(--ink)] rounded-[2px] px-3 py-1.5 shadow-[3px_3px_0_var(--ink)] active:translate-y-px cursor-pointer">↺ Undo last heat</button>}
+                className="font-[Fredoka] font-semibold text-[12px] bg-white text-[var(--ink)] border-2 border-[var(--ink)] rounded-[9px] px-3 py-1.5 shadow-[0_2px_0_rgba(22,35,59,.22)] active:translate-y-px cursor-pointer">↺ Undo last heat</button>}
             </div>
           ):(
-            <div className="rounded-[2px] border-[3px] border-[var(--ink)] bg-white p-4 shadow-[3px_3px_0_var(--ink)]">
+            <div className="rounded-2xl border-[3px] border-[var(--ink)] bg-white p-4 shadow-[0_4px_0_rgba(22,35,59,.14)]">
               <div className="flex items-center justify-between mb-3">
                 <span className="font-[Fredoka] font-bold text-[14px] text-[var(--ink)]">🏁 Now Racing</span>
                 <span className="font-[Nunito] font-bold text-[10.5px] text-[var(--muted)]">{readOnly?"Tap order on host screen":"Tap in finishing order"}</span>
@@ -780,8 +778,8 @@ function GrandPrix({names,realCount,gpLog,target,readOnly,onRecord,onUndo}:{
                   const assigned=p>=0;
                   return(
                     <button key={seed} disabled={readOnly||assigned} onClick={()=>tap(seed)} style={{touchAction:"manipulation"}}
-                      className={`relative flex items-center gap-2 px-3 py-3 rounded-[2px] border-[3px] border-[var(--ink)] text-left transition-all ${assigned?"":"bg-[#F7F2E6] hover:bg-[var(--sun)] cursor-pointer active:translate-y-px"} ${readOnly&&!assigned?"opacity-90 cursor-default":""}`}>
-                      <span className="inline-grid place-items-center w-[22px] h-[22px] rounded-[2px] border-[3px] border-[var(--ink)] text-[10px] font-bold flex-shrink-0"
+                      className={`relative flex items-center gap-2 px-3 py-3 rounded-[11px] border-2 border-[var(--ink)] text-left transition-all ${assigned?"":"bg-[#F7F2E6] hover:bg-[var(--sun)] cursor-pointer active:translate-y-px"} ${readOnly&&!assigned?"opacity-90 cursor-default":""}`}>
+                      <span className="inline-grid place-items-center w-[22px] h-[22px] rounded-[5px] border border-[var(--ink)] text-[10px] font-bold flex-shrink-0"
                         style={{background:assigned?POS_COLOR[p]:"#fff",color:"var(--ink)"}}>{assigned?p+1:"·"}</span>
                       <span className="font-[Fredoka] font-bold text-[13px] text-[var(--ink)] flex-1 min-w-0 truncate">{nameOf(seed)}</span>
                       {assigned&&<span className="font-[Nunito] font-bold text-[10px] text-[var(--muted)] flex-shrink-0">{POS_LABEL[p]} · +{gpPointsFor(p)}</span>}
@@ -792,13 +790,13 @@ function GrandPrix({names,realCount,gpLog,target,readOnly,onRecord,onUndo}:{
               {!readOnly&&(
                 <div className="flex items-center gap-2 mt-3">
                   <button disabled={!ready} onClick={()=>{if(ready){onRecord(order);setOrder([]);}}} style={{touchAction:"manipulation"}}
-                    className={`flex-1 font-[Fredoka] font-bold text-[13px] px-3 py-2.5 rounded-[2px] border-[3px] border-[var(--ink)] shadow-[3px_3px_0_var(--ink)] transition-all ${ready?"bg-[var(--grass)] text-white hover:brightness-105 active:translate-y-px cursor-pointer":"bg-[#E7E2D5] text-[var(--muted)] cursor-default"}`}>
+                    className={`flex-1 font-[Fredoka] font-bold text-[13px] px-3 py-2.5 rounded-[10px] border-2 border-[var(--ink)] shadow-[0_3px_0_rgba(22,35,59,.22)] transition-all ${ready?"bg-[var(--grass)] text-white hover:brightness-105 active:translate-y-px cursor-pointer":"bg-[#E7E2D5] text-[var(--muted)] cursor-default"}`}>
                     {ready?"✔ Save heat result":`Tap ${heat.length-order.length} more`}
                   </button>
                   {order.length>0&&<button onClick={()=>setOrder([])} style={{touchAction:"manipulation"}}
-                    className="font-[Fredoka] font-semibold text-[12px] bg-white text-[var(--ink)] border-[3px] border-[var(--ink)] rounded-[2px] px-3 py-2.5 shadow-[3px_3px_0_var(--ink)] active:translate-y-px cursor-pointer">Clear</button>}
+                    className="font-[Fredoka] font-semibold text-[12px] bg-white text-[var(--ink)] border-2 border-[var(--ink)] rounded-[10px] px-3 py-2.5 shadow-[0_2px_0_rgba(22,35,59,.22)] active:translate-y-px cursor-pointer">Clear</button>}
                   {done>0&&<button onClick={onUndo} title="Undo last saved heat" style={{touchAction:"manipulation"}}
-                    className="font-[Fredoka] font-semibold text-[12px] bg-white text-[var(--ink)] border-[3px] border-[var(--ink)] rounded-[2px] px-3 py-2.5 shadow-[3px_3px_0_var(--ink)] active:translate-y-px cursor-pointer">↺</button>}
+                    className="font-[Fredoka] font-semibold text-[12px] bg-white text-[var(--ink)] border-2 border-[var(--ink)] rounded-[10px] px-3 py-2.5 shadow-[0_2px_0_rgba(22,35,59,.22)] active:translate-y-px cursor-pointer">↺</button>}
                 </div>
               )}
             </div>
@@ -812,11 +810,11 @@ function GrandPrix({names,realCount,gpLog,target,readOnly,onRecord,onUndo}:{
             {standings.map(r=>{
               const leader=r.rank===1&&done>0;
               return(
-                <div key={r.seed} className={`flex items-center gap-2 border-[3px] border-[var(--ink)] rounded-[2px] px-2.5 py-1.5 ${leader?"bg-[var(--sun)] shadow-[3px_3px_0_var(--ink)]":"bg-white"}`}>
-                  <span className="font-[Press_Start_2P,monospace] text-[10px] text-[var(--ink)] w-6 flex-shrink-0 text-center">{r.rank}</span>
+                <div key={r.seed} className={`flex items-center gap-2 border-2 border-[var(--ink)] rounded-[9px] px-2.5 py-1.5 ${leader?"bg-[var(--sun)] shadow-[0_2px_0_rgba(22,35,59,.18)]":"bg-white"}`}>
+                  <span className="font-[Luckiest_Guy,cursive] text-[14px] text-[var(--ink)] w-6 flex-shrink-0 text-center">{r.rank}</span>
                   <span className="font-[Fredoka] font-bold text-[13px] text-[var(--ink)] flex-1 min-w-0 truncate">{nameOf(r.seed)}</span>
                   <span className="font-[Nunito] font-bold text-[10px] text-[var(--muted)] flex-shrink-0">{r.races} heats</span>
-                  <span className="font-[Press_Start_2P,monospace] text-[11px] text-[var(--ink)] flex-shrink-0 min-w-[26px] text-right">{r.points}</span>
+                  <span className="font-[Luckiest_Guy,cursive] text-[16px] text-[var(--ink)] flex-shrink-0 min-w-[26px] text-right">{r.points}</span>
                 </div>
               );
             })}
@@ -1107,10 +1105,10 @@ export default function App(){
           <div className="h-3" style={{backgroundImage:"linear-gradient(45deg,#16233B 25%,transparent 25%),linear-gradient(-45deg,#16233B 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#16233B 75%),linear-gradient(-45deg,transparent 75%,#16233B 75%)",backgroundSize:"12px 12px",backgroundPosition:"0 0,0 6px,6px -6px,-6px 0",backgroundColor:"#FFF",borderBottom:"2.5px solid var(--ink)"}}/>
           <div className="relative z-10 max-w-[1360px] mx-auto px-4 py-3 flex flex-wrap gap-3 items-center justify-between">
             <div className="flex flex-col gap-2">
-              <h1 className="font-[Press_Start_2P,monospace] text-[clamp(12px,2.1vw,21px)] m-0 leading-[1.4] tracking-wide text-[var(--sun)]"
-                style={{WebkitTextStroke:"1.5px var(--ink)",textShadow:"3px 3px 0 var(--ink)",transform:"rotate(-2deg)"}}>BEERIO KART</h1>
-              <div className="font-[Fredoka] font-semibold text-[11.5px] tracking-wider text-[var(--ink)] bg-[var(--foam)] border-[3px] border-[var(--ink)] rounded-[2px] px-2.5 py-1 inline-flex items-center gap-2 self-start shadow-[3px_3px_0_var(--ink)]">
-                <span className="w-1.5 h-1.5 rounded-[2px] bg-[var(--grass)] shadow-[0_0_0_1.5px_var(--ink)]"/>
+              <h1 className="font-[Luckiest_Guy,cursive] text-[clamp(20px,3.4vw,38px)] m-0 leading-none tracking-wide text-[var(--sun)]"
+                style={{WebkitTextStroke:"2px var(--ink)",textShadow:"3px 3px 0 var(--ink)",transform:"rotate(-2deg)"}}>BEERIO KART</h1>
+              <div className="font-[Fredoka] font-semibold text-[11.5px] tracking-wider text-[var(--ink)] bg-[var(--foam)] border-2 border-[var(--ink)] rounded-full px-2.5 py-1 inline-flex items-center gap-2 self-start shadow-[0_2px_0_rgba(22,35,59,.18)]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--grass)] shadow-[0_0_0_1.5px_var(--ink)]"/>
                 {isSpectator?(isLive?"📺 Live Spectator":"📺 Spectator View"):(sessionCode&&liveStatus==="live"?`🔴 LIVE · Room ${sessionCode}`:"🏎️ Double Elimination Night")}
               </div>
             </div>
@@ -1118,14 +1116,14 @@ export default function App(){
               {!isSpectator&&(
                 <>
                   <button onClick={()=>{setShareOpen(true);startLive();}} title="Spectator view / QR"
-                    className="w-9 h-9 rounded-[2px] border-[3px] border-[var(--ink)] bg-[var(--foam)] text-[var(--ink)] text-[15px] grid place-items-center shadow-[3px_3px_0_var(--ink)] hover:bg-white active:translate-y-px transition-all cursor-pointer flex-shrink-0" style={{touchAction:"manipulation"}}>📺</button>
+                    className="w-9 h-9 rounded-[10px] border-2 border-[var(--ink)] bg-[var(--foam)] text-[var(--ink)] text-[15px] grid place-items-center shadow-[0_3px_0_rgba(22,35,59,.22)] hover:bg-white active:translate-y-px transition-all cursor-pointer flex-shrink-0" style={{touchAction:"manipulation"}}>📺</button>
                   <button onClick={()=>setFormatOpen(true)} title="Format"
-                    className="w-9 h-9 rounded-[2px] border-[3px] border-[var(--ink)] bg-[var(--foam)] text-[var(--ink)] text-[15px] grid place-items-center shadow-[3px_3px_0_var(--ink)] hover:bg-white active:translate-y-px transition-all cursor-pointer flex-shrink-0" style={{touchAction:"manipulation"}}>⚙️</button>
+                    className="w-9 h-9 rounded-[10px] border-2 border-[var(--ink)] bg-[var(--foam)] text-[var(--ink)] text-[15px] grid place-items-center shadow-[0_3px_0_rgba(22,35,59,.22)] hover:bg-white active:translate-y-px transition-all cursor-pointer flex-shrink-0" style={{touchAction:"manipulation"}}>⚙️</button>
                 </>
               )}
               <button onClick={()=>setRulesOpen(true)} title="Rules"
-                className="w-9 h-9 rounded-[2px] border-[3px] border-[var(--ink)] bg-[var(--foam)] text-[var(--ink)] text-[15px] grid place-items-center shadow-[3px_3px_0_var(--ink)] hover:bg-white active:translate-y-px transition-all cursor-pointer flex-shrink-0" style={{touchAction:"manipulation"}}>ℹ️</button>
-              <div className="flex items-center gap-3.5 bg-[var(--foam)] border-[3px] border-[var(--ink)] rounded-[2px] px-3 py-2 shadow-[3px_3px_0_var(--ink)]">
+                className="w-9 h-9 rounded-[10px] border-2 border-[var(--ink)] bg-[var(--foam)] text-[var(--ink)] text-[15px] grid place-items-center shadow-[0_3px_0_rgba(22,35,59,.22)] hover:bg-white active:translate-y-px transition-all cursor-pointer flex-shrink-0" style={{touchAction:"manipulation"}}>ℹ️</button>
+              <div className="flex items-center gap-3.5 bg-[var(--foam)] border-2 border-[var(--ink)] rounded-[11px] px-3 py-2 shadow-[0_3px_0_rgba(22,35,59,.18)]">
                 <BeerMug pct={pct}/>
                 <div className="font-[Fredoka]">
                   <div className="text-[19px] font-bold text-[var(--ink)] leading-none">{done} / {total}</div>
@@ -1139,17 +1137,17 @@ export default function App(){
         {/* Spectator banner */}
         {isSpectator&&(
           <div className="max-w-[1360px] mx-auto px-4 mt-3">
-            <div className="flex flex-wrap items-center justify-between gap-2 bg-[var(--grape)] text-white border-[3px] border-[var(--ink)] rounded-[2px] px-4 py-2 shadow-[3px_3px_0_var(--ink)]">
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-[var(--grape)] text-white border-2 border-[var(--ink)] rounded-[11px] px-4 py-2 shadow-[0_3px_0_rgba(22,35,59,.22)]">
               <span className="font-[Fredoka] font-semibold text-[12.5px] flex items-center gap-2">
                 {isLive?(
                   <>
-                    <span className="w-2.5 h-2.5 rounded-[2px] inline-block" style={{background:liveStatus==="live"?"#7CFFB0":"#FFC9C9"}}/>
+                    <span className="w-2.5 h-2.5 rounded-full inline-block" style={{background:liveStatus==="live"?"#7CFFB0":"#FFC9C9"}}/>
                     {liveStatus==="error"?"Can't reach the host. The room may have ended.":liveStatus==="live"?"Watching live, updates automatically.":"Connecting to live room…"}
                   </>
                 ):"📺 You're watching a shared snapshot, read only."}
               </span>
               <button onClick={editCopy} style={{touchAction:"manipulation"}}
-                className="font-[Fredoka] font-bold text-[12px] bg-white text-[var(--ink)] border-[3px] border-[var(--ink)] rounded-[2px] px-3 py-1 shadow-[3px_3px_0_var(--ink)] active:translate-y-px cursor-pointer">Edit a copy</button>
+                className="font-[Fredoka] font-bold text-[12px] bg-white text-[var(--ink)] border-2 border-[var(--ink)] rounded-[8px] px-3 py-1 shadow-[0_2px_0_rgba(22,35,59,.25)] active:translate-y-px cursor-pointer">Edit a copy</button>
             </div>
           </div>
         )}
@@ -1162,12 +1160,12 @@ export default function App(){
                 <span>Racers</span>
                 <span className="inline-flex items-center gap-1.5">
                   <button onClick={()=>handleSetCount(playerCount-1)} disabled={playerCount<=MIN_PLAYERS} style={{touchAction:"manipulation"}}
-                    className="w-6 h-6 rounded-[2px] border-[3px] border-[var(--ink)] bg-[var(--sun)] text-[var(--ink)] font-bold text-base cursor-pointer grid place-items-center shadow-[3px_3px_0_var(--ink)] active:translate-y-px transition-all disabled:opacity-40 hover:bg-[var(--sun-deep)]">−</button>
+                    className="w-6 h-6 rounded-[6px] border-2 border-[var(--ink)] bg-[var(--sun)] text-[var(--ink)] font-bold text-base cursor-pointer grid place-items-center shadow-[0_2px_0_rgba(22,35,59,.26)] active:translate-y-px transition-all disabled:opacity-40 hover:bg-[var(--sun-deep)]">−</button>
                   <span className="font-bold text-[19px] text-[var(--ink)] min-w-[24px] text-center">{playerCount}</span>
                   <button onClick={()=>handleSetCount(playerCount+1)} disabled={playerCount>=MAX_PLAYERS} style={{touchAction:"manipulation"}}
-                    className="w-6 h-6 rounded-[2px] border-[3px] border-[var(--ink)] bg-[var(--sun)] text-[var(--ink)] font-bold text-base cursor-pointer grid place-items-center shadow-[3px_3px_0_var(--ink)] active:translate-y-px transition-all disabled:opacity-40 hover:bg-[var(--sun-deep)]">+</button>
+                    className="w-6 h-6 rounded-[6px] border-2 border-[var(--ink)] bg-[var(--sun)] text-[var(--ink)] font-bold text-base cursor-pointer grid place-items-center shadow-[0_2px_0_rgba(22,35,59,.26)] active:translate-y-px transition-all disabled:opacity-40 hover:bg-[var(--sun-deep)]">+</button>
                   <span className="font-[Nunito] font-semibold text-[10px] text-[var(--muted)]">{capText}</span>
-                  <span className="font-[Nunito] font-semibold text-[10px] text-[var(--ink)] bg-[var(--card2)] border-[3px] border-[var(--ink)] rounded-[2px] px-2 py-px">
+                  <span className="font-[Nunito] font-semibold text-[10px] text-[var(--ink)] bg-[var(--card2)] border border-[var(--ink)] rounded-full px-2 py-px">
                     {isGP?`grand prix · ${format.gpRaces} each`:`bracket · ${format.series===1?"single":format.series===2?"Bo3":"Bo5"}`}
                   </span>
                 </span>
@@ -1175,11 +1173,11 @@ export default function App(){
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mb-2">
                 {names.map((name,i)=>(
                   <div key={i} className="relative">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 font-[Fredoka] font-bold text-[10.5px] text-[var(--ink)] bg-[var(--sun)] border-[3px] border-[var(--ink)] w-[17px] h-[17px] rounded-[4px] grid place-items-center z-10">{i+1}</span>
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 font-[Fredoka] font-bold text-[10.5px] text-[var(--ink)] bg-[var(--sun)] border border-[var(--ink)] w-[17px] h-[17px] rounded-[4px] grid place-items-center z-10">{i+1}</span>
                     <input type="text" value={name} onChange={e=>handleNameChange(i,e.target.value)}
                       placeholder={`Racer ${i+1}`} maxLength={18} autoComplete="off"
-                      className="w-full pl-7 pr-2 py-1.5 bg-white border-[3px] border-[var(--ink)] rounded-[2px] text-[var(--ink)] font-[Nunito] text-[12.5px] font-bold outline-none shadow-[3px_3px_0_var(--ink)] focus:shadow-[0_0_0_2px_var(--sun),0_2px_0_rgba(22,35,59,.1)] placeholder:text-[#A9B2C2]"/>
-                    {!name.trim()&&<span className="absolute right-1.5 top-1/2 -translate-y-1/2 font-[Fredoka] font-bold text-[8.5px] text-white bg-[var(--coral)] border-[3px] border-[var(--ink)] rounded-[2px] px-1 py-px pointer-events-none">BYE</span>}
+                      className="w-full pl-7 pr-2 py-1.5 bg-white border-2 border-[var(--ink)] rounded-[8px] text-[var(--ink)] font-[Nunito] text-[12.5px] font-bold outline-none shadow-[0_2px_0_rgba(22,35,59,.1)] focus:shadow-[0_0_0_2px_var(--sun),0_2px_0_rgba(22,35,59,.1)] placeholder:text-[#A9B2C2]"/>
+                    {!name.trim()&&<span className="absolute right-1.5 top-1/2 -translate-y-1/2 font-[Fredoka] font-bold text-[8.5px] text-white bg-[var(--coral)] border border-[var(--ink)] rounded-[3px] px-1 py-px pointer-events-none">BYE</span>}
                   </div>
                 ))}
               </div>
@@ -1188,7 +1186,7 @@ export default function App(){
             <div className="flex flex-col gap-2 min-w-[152px]">
               {[{icon:"❓",label:"Shuffle seeds",onClick:handleShuffle,p:true},{icon:"↺",label:"Reset results",onClick:handleReset,p:false},{icon:"🧹",label:"Clear names",onClick:handleClearAll,p:false}].map(btn=>(
                 <button key={btn.label} onClick={btn.onClick} style={{touchAction:"manipulation"}}
-                  className={`font-[Fredoka] tracking-wide font-semibold text-[12.5px] cursor-pointer px-3 py-2 rounded-[2px] border-[3px] border-[var(--ink)] text-[var(--ink)] shadow-[3px_3px_0_var(--ink)] active:translate-y-[2px] active:shadow-[3px_3px_0_var(--ink)] transition-all text-left flex items-center gap-2 ${btn.p?"bg-[var(--sun)] hover:bg-[var(--sun-deep)]":"bg-white hover:bg-[#F5EFE0]"}`}>
+                  className={`font-[Fredoka] tracking-wide font-semibold text-[12.5px] cursor-pointer px-3 py-2 rounded-[9px] border-2 border-[var(--ink)] text-[var(--ink)] shadow-[0_3px_0_rgba(22,35,59,.22)] active:translate-y-[2px] active:shadow-[0_1px_0_rgba(22,35,59,.22)] transition-all text-left flex items-center gap-2 ${btn.p?"bg-[var(--sun)] hover:bg-[var(--sun-deep)]":"bg-white hover:bg-[#F5EFE0]"}`}>
                   <span>{btn.icon}</span>{btn.label}
                 </button>
               ))}
@@ -1199,9 +1197,9 @@ export default function App(){
         {/* Stage */}
         <div className="max-w-[1360px] mx-auto px-4 pb-12">
           {realCount<2?(
-            <div className="mt-6 border-[3px] border-dashed border-[var(--ink)] rounded-[2px] p-10 text-center bg-[#FBF6EA]">
+            <div className="mt-6 border-2 border-dashed border-[var(--ink)] rounded-[14px] p-10 text-center bg-[#FBF6EA]">
               <span className="text-4xl block mb-3">🏁</span>
-              <h3 className="font-[Press_Start_2P,monospace] text-[var(--ink)] text-[11px] leading-[1.5] tracking-wider m-0 mb-2">READY TO RACE?</h3>
+              <h3 className="font-[Luckiest_Guy,cursive] text-[var(--ink)] text-xl tracking-wider m-0 mb-2">READY TO RACE?</h3>
               <p className="font-[Nunito] font-semibold text-[var(--muted)] text-[13px] m-0 leading-relaxed">Drop in at least two racer names above and {isGP?"start your Grand Prix.":"the bracket builds itself."}</p>
             </div>
           ):isGP?(
@@ -1224,26 +1222,26 @@ export default function App(){
               {/* Grand Final */}
               <section className="mt-5">
                 <div className="flex items-center gap-3 mb-2.5">
-                  <span className="w-3 h-3 border-[3px] border-[var(--ink)] rotate-45 rounded-[2px]" style={{background:"var(--grape)"}}/>
-                  <span className="font-[Press_Start_2P,monospace] text-[10px] tracking-wider text-white rounded-[2px] px-3 py-0.5 shadow-[3px_3px_0_var(--ink)]"
+                  <span className="w-3 h-3 border-2 border-[var(--ink)] rotate-45 rounded-sm" style={{background:"var(--grape)"}}/>
+                  <span className="font-[Luckiest_Guy,cursive] text-[17px] tracking-wider text-white rounded-[9px] px-3 py-0.5 shadow-[0_3px_0_rgba(22,35,59,.22)]"
                     style={{background:"var(--grape)",border:"2px solid var(--ink)",transform:"rotate(-1deg)"}}>Grand Final</span>
                   <span className="h-[2px] bg-[var(--ink)] opacity-15 flex-1 rounded"/>
                 </div>
 
                 {gfBothKnown&&!champ&&(
-                  <div className="mb-3 inline-flex items-center gap-0 border-[3px] border-[var(--ink)] rounded-[2px] overflow-hidden shadow-[3px_3px_0_var(--ink)]">
+                  <div className="mb-3 inline-flex items-center gap-0 border-2 border-[var(--ink)] rounded-[10px] overflow-hidden shadow-[0_2px_0_rgba(22,35,59,.18)]">
                     <div className={`flex items-center gap-2 px-3 py-1.5 ${gfScoreA>gfScoreB?"bg-[var(--sun)]":"bg-white"}`}>
                       <span className="font-[Fredoka] font-bold text-[12px] text-[var(--ink)] max-w-[110px] truncate">{gfA}</span>
-                      <span className="font-[Press_Start_2P,monospace] text-[16px] text-[var(--ink)] leading-none">{gfScoreA}</span>
+                      <span className="font-[Luckiest_Guy,cursive] text-[20px] text-[var(--ink)] leading-none">{gfScoreA}</span>
                     </div>
                     <div className="w-px self-stretch bg-[var(--ink)]"/>
                     <div className="px-2 py-1.5 bg-[var(--grape)] flex flex-col items-center gap-0">
                       <span className="font-[Fredoka] font-bold text-[8px] text-white tracking-widest uppercase leading-none">First to</span>
-                      <span className="font-[Press_Start_2P,monospace] text-[11px] text-white leading-none">2</span>
+                      <span className="font-[Luckiest_Guy,cursive] text-[13px] text-white leading-none">2</span>
                     </div>
                     <div className="w-px self-stretch bg-[var(--ink)]"/>
                     <div className={`flex items-center gap-2 px-3 py-1.5 ${gfScoreB>gfScoreA?"bg-[var(--sun)]":"bg-white"}`}>
-                      <span className="font-[Press_Start_2P,monospace] text-[16px] text-[var(--ink)] leading-none">{gfScoreB}</span>
+                      <span className="font-[Luckiest_Guy,cursive] text-[20px] text-[var(--ink)] leading-none">{gfScoreB}</span>
                       <span className="font-[Fredoka] font-bold text-[12px] text-[var(--ink)] max-w-[110px] truncate">{gfB}</span>
                     </div>
                     <div className="w-px self-stretch bg-[var(--ink)]"/>
@@ -1261,17 +1259,17 @@ export default function App(){
                     {showReset&&<p className="font-[Nunito] text-[10.5px] font-bold text-[var(--grape-deep)] leading-snug">Lower-bracket forced a reset. One more game decides it.</p>}
                   </div>
                   {champ?(
-                    <div className="victor-celebrate flex-1 min-w-[220px] rounded-[2px] border-[3px] border-[var(--ink)] flex flex-col items-center justify-center gap-3 px-8 py-8 text-center"
-                      style={{background:"radial-gradient(130% 130% at 50% -10%,rgba(255,192,46,.7),rgba(255,192,46,0) 62%),var(--card2)"}}>
+                    <div className="flex-1 min-w-[220px] rounded-2xl border-[3px] border-[var(--ink)] flex flex-col items-center justify-center gap-3 px-8 py-8 text-center"
+                      style={{background:"radial-gradient(130% 130% at 50% -10%,rgba(255,192,46,.7),rgba(255,192,46,0) 62%),var(--card2)",boxShadow:"0 6px 0 rgba(22,35,59,.22), 0 12px 32px rgba(22,35,59,.12)",animation:"champPop .4s cubic-bezier(.34,1.56,.64,1) both"}}>
                       <span style={{fontSize:52,lineHeight:1,filter:"drop-shadow(0 4px 0 rgba(22,35,59,.18))",animation:"champBounce 1.8s ease-in-out infinite"}}>🍻</span>
                       <div>
-                        <div className="font-[Press_Start_2P,monospace] tracking-[2px] text-[9px] text-[var(--sun-deep)] uppercase mb-2 leading-[1.5]">🏆 Champion 🏆</div>
-                        <div className="font-[Press_Start_2P,monospace] text-[clamp(14px,2.6vw,20px)] text-[var(--ink)] leading-[1.4] tracking-wide break-words" style={{textShadow:"2px 2px 0 rgba(22,35,59,.1)"}}>{champ.name}</div>
+                        <div className="font-[Fredoka] tracking-[3px] text-[11px] text-[var(--sun-deep)] font-bold uppercase mb-1">🏆 Champion 🏆</div>
+                        <div className="font-[Luckiest_Guy,cursive] text-[clamp(22px,4vw,34px)] text-[var(--ink)] leading-tight tracking-wide" style={{textShadow:"2px 2px 0 rgba(22,35,59,.1)"}}>{champ.name}</div>
                       </div>
                       <div className="font-[Fredoka] font-semibold text-[13px] text-[var(--ink-soft)]">Drinks are on the winner 🍺</div>
                     </div>
                   ):(
-                    <div className="flex-1 min-w-[180px] max-w-[240px] rounded-[2px] border-[3px] border-dashed border-[var(--ink)] flex flex-col items-center justify-center gap-1.5 px-5 py-4 text-center bg-[#FBF6EA]">
+                    <div className="flex-1 min-w-[180px] max-w-[240px] rounded-xl border-2 border-dashed border-[var(--ink)] flex flex-col items-center justify-center gap-1.5 px-5 py-4 text-center bg-[#FBF6EA]">
                       <span className="text-3xl">🏁</span>
                       <span className="font-[Fredoka] tracking-[2px] text-[9.5px] text-[var(--sun-deep)] font-bold uppercase">Champion</span>
                       <span className="font-[Fredoka] font-semibold text-[var(--muted)] text-[13px]">To be crowned</span>
@@ -1287,7 +1285,7 @@ export default function App(){
                   ["rgba(255,90,90,0.45)","var(--coral)","🐢 Losers"],
                   ["rgba(124,92,255,0.45)","var(--grape)","⭐ Grand Final"],
                 ] as [string,string,string][]).map(([bg,border,l])=>(
-                  <span key={l} className="flex items-center gap-1"><span className="w-3 h-3 rounded-[2px] border-2" style={{background:bg,borderColor:border}}/>{l}</span>
+                  <span key={l} className="flex items-center gap-1"><span className="w-3 h-3 rounded-[3px] border-2" style={{background:bg,borderColor:border}}/>{l}</span>
                 ))}
                 <span>{isSpectator?"📺 Read-only spectator view":"👉 Tap a racer to mark the heat winner. Tap again to undo."}</span>
               </div>
