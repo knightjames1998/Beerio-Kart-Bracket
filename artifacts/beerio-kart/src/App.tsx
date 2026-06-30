@@ -649,7 +649,53 @@ function ShareModal({code,status,liveUrl,snapshotUrl,onClose,onRetry}:{
   );
 }
 
-// ─── Match History ────────────────────────────────────────────────────────────
+// ─── Floating "join live" QR ───────────────────────────────────────────────────
+// Stays on screen at all times once a live room exists, so anyone nearby can scan
+// in without the host hunting for the share button. Portaled to <body> so scroll
+// position never affects it. Offset up from the corner so it never sits behind
+// Replit's "Made with Replit" publish badge.
+function FloatingQR({liveUrl,status,canGoLive,isSpectator,onGoLive,onOpen}:{
+  liveUrl:string;status:LiveStatus;canGoLive:boolean;isSpectator:boolean;onGoLive:()=>void;onOpen:()=>void;
+}){
+  const [copied,setCopied]=useState(false);
+  const wrapStyle:React.CSSProperties={
+    position:"fixed",
+    right:"max(14px, env(safe-area-inset-right))",
+    bottom:"calc(82px + env(safe-area-inset-bottom))",
+    zIndex:40,
+  };
+  if(!liveUrl){
+    if(!canGoLive)return null;
+    return createPortal(
+      <button onClick={onGoLive} style={{...wrapStyle,touchAction:"manipulation"}}
+        className="flex items-center gap-2 font-[Fredoka] font-bold text-[12px] text-[var(--ink)] bg-[var(--foam)] border-2 border-[var(--ink)] rounded-full pl-3 pr-4 py-2.5 shadow-[0_4px_0_rgba(22,35,59,.25)] hover:bg-white active:translate-y-px transition-all cursor-pointer">
+        📺 Go live
+      </button>,
+      document.body
+    );
+  }
+  // Spectators can't (and shouldn't) start/own a live session — tapping just copies the link.
+  const handleTap=async()=>{
+    if(isSpectator){
+      try{await navigator.clipboard.writeText(liveUrl);setCopied(true);setTimeout(()=>setCopied(false),1400);}catch{/* clipboard blocked */}
+      return;
+    }
+    onOpen();
+  };
+  return createPortal(
+    <button onClick={handleTap} title={isSpectator?"Tap to copy the join link":"Tap to scan or copy the join link"} style={{...wrapStyle,touchAction:"manipulation"}}
+      className="flex flex-col items-center gap-1 bg-[var(--foam)] border-[3px] border-[var(--ink)] rounded-[14px] p-1.5 shadow-[0_4px_0_rgba(22,35,59,.28)] hover:bg-white active:translate-y-px transition-all cursor-pointer">
+      <QRCodeSVG value={liveUrl} size={68} bgColor="#FFFFFF" fgColor="#16233B" level="M" includeMargin={false}/>
+      <span className="flex items-center gap-1.5 font-[Fredoka] font-bold text-[8px] text-[var(--ink-soft)] tracking-wider uppercase">
+        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{background:status==="live"?"var(--grass)":"var(--coral)"}}/>
+        {copied?"Copied!":"Join live"}
+      </span>
+    </button>,
+    document.body
+  );
+}
+
+
 function MatchHistory({BR,M,series,groupTitleById}:{BR:Bracket;M:Record<string,MatchResult>;series:Series;groupTitleById:Record<string,string>}){
   const [open,setOpen]=useState(false);
   const rows=BR.defs
@@ -1262,7 +1308,8 @@ export default function App(){
     return map;
   },[BR]);
 
-  const liveUrl=useMemo(()=>(sessionCode&&typeof location!=="undefined")?`${location.origin}${location.pathname}?s=${sessionCode}`:"",[sessionCode]);
+  const joinCode=sessionCode||liveCode;
+  const liveUrl=useMemo(()=>(joinCode&&typeof location!=="undefined")?`${location.origin}${location.pathname}?s=${joinCode}`:"",[joinCode]);
   const snapshotUrl=useMemo(()=>shareOpen?buildShareURL({playerCount,names,results,series,format,gpLog}):"",[shareOpen,playerCount,names,results,series,format,gpLog]);
 
   return(
@@ -1280,6 +1327,10 @@ export default function App(){
         {rulesOpen&&<RulesModal onClose={()=>setRulesOpen(false)}/>}
         {formatOpen&&<FormatModal format={format} onChange={handleFormatChange} onClose={()=>setFormatOpen(false)}/>}
         {shareOpen&&<ShareModal code={sessionCode} status={liveStatus} liveUrl={liveUrl} snapshotUrl={snapshotUrl} onClose={()=>setShareOpen(false)} onRetry={startLive}/>}
+        {!shareOpen&&(
+          <FloatingQR liveUrl={liveUrl} status={liveStatus} canGoLive={!isSpectator} isSpectator={isSpectator}
+            onGoLive={startLive} onOpen={()=>{setShareOpen(true);startLive();}}/>
+        )}
 
         {/* Header */}
         <header className="relative border-b-[3px] border-[var(--ink)] overflow-hidden" style={{
