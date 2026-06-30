@@ -32,12 +32,13 @@ interface MatchResult {
 
 // Race wins needed to take a match: 1 = single race, 2 = Best of 3, 3 = Best of 5
 type SeriesLen = 1 | 2 | 3;
-type HeatSize  = 2 | 4;
-interface Format { series: SeriesLen; heatSize: HeatSize; }
+type Mode = "bracket" | "gp";        // bracket = 1v1 double-elim; gp = 4-kart Grand Prix
+interface Format { series: SeriesLen; mode: Mode; gpRaces: number; }
 type Series = Record<string, { a: number; b: number }>;
 interface SavedState {
   playerCount: number; names: string[];
   results: Record<string, "A" | "B">; series: Series; format: Format;
+  gpLog: number[][];   // Grand Prix: each entry is one race's finishing order, as seed indices
 }
 
 // ─── Layout constants ─────────────────────────────────────────────────────────
@@ -56,8 +57,47 @@ const ITEM_ICONS  = ["🍄","🍌","⭐","🐢","💥","🔥","🪙"];
 const STORAGE_KEY = "beerio-kart-state-v1";
 const SESSION_KEY = "beerio-kart-session-v1";
 const API = "/api";
-const DEFAULT_FORMAT: Format = { series: 1, heatSize: 2 };
+const DEFAULT_FORMAT: Format = { series: 1, mode: "bracket", gpRaces: 3 };
 type LiveStatus = "idle" | "connecting" | "live" | "error";
+
+// ─── Grand Prix scoring (4-kart heats, points) ────────────────────────────────
+const GP_POINTS = [3, 2, 1, 0];                         // 1st..4th
+const gpPointsFor = (pos: number) => (pos >= 0 && pos < 4 ? GP_POINTS[pos] : 0);
+const gpHeatSize = (realCount: number) => Math.min(4, Math.max(1, realCount));
+function gpTotalRaces(realCount: number, target: number) {
+  if (realCount < 2) return 0;
+  return Math.ceil((realCount * target) / gpHeatSize(realCount));
+}
+function gpRaceCounts(realCount: number, gpLog: number[][]) {
+  const c = new Array(realCount).fill(0);
+  for (const r of gpLog) for (const s of r) if (s < realCount) c[s]++;
+  return c;
+}
+// Next heat: the seeds who have raced the fewest times (ties: lower seed first)
+function gpNextHeat(realCount: number, gpLog: number[][]) {
+  const hs = gpHeatSize(realCount);
+  const counts = gpRaceCounts(realCount, gpLog);
+  return Array.from({ length: realCount }, (_, i) => i)
+    .sort((a, b) => counts[a] - counts[b] || a - b)
+    .slice(0, hs)
+    .sort((a, b) => a - b);
+}
+function gpComplete(realCount: number, target: number, gpLog: number[][]) {
+  return realCount >= 2 && gpLog.length >= gpTotalRaces(realCount, target);
+}
+interface GPStanding { seed: number; points: number; races: number; wins: number; rank: number; }
+function gpStandings(realCount: number, gpLog: number[][]): GPStanding[] {
+  const rows: GPStanding[] = Array.from({ length: realCount }, (_, seed) => ({ seed, points: 0, races: 0, wins: 0, rank: 0 }));
+  for (const r of gpLog) r.forEach((seed, pos) => {
+    if (seed >= realCount) return;
+    rows[seed].points += gpPointsFor(pos);
+    rows[seed].races++;
+    if (pos === 0) rows[seed].wins++;
+  });
+  rows.sort((a, b) => b.points - a.points || b.wins - a.wins || a.seed - b.seed);
+  rows.forEach((r, i) => (r.rank = i + 1));
+  return rows;
+}
 
 // ─── Bracket engine ───────────────────────────────────────────────────────────
 function nextPow2(n: number) { let s=1; while(s<n) s*=2; return Math.max(2,s); }
@@ -416,13 +456,14 @@ function BeerMug({pct}:{pct:number}){
 
 // ─── Rules Modal ──────────────────────────────────────────────────────────────
 const RULES = [
-  {icon:"🚗",title:"No Drinking While Moving",body:"You can drink during the race — but only while your kart is stopped. Pull over, take your sips, then get back in it."},
-  {icon:"🍺",title:"Finish Before You Cross",body:"Your drink must be completely finished before you cross the finish line. Cross with liquid left and your finish doesn't count — pull back and chug."},
-  {icon:"🏁",title:"Double Elimination",body:"Everyone gets a second chance. Your first loss drops you to the Losers Bracket. A second loss and you're done. The Losers Bracket champ earns their way back to the Grand Final."},
-  {icon:"⭐",title:"Grand Final — WB Head Start",body:"The Winners Bracket champion enters the Grand Final already up one game. If they win the next game, tournament over. If the Losers champ wins it, the score levels and one more game decides everything."},
-  {icon:"🏎️",title:"4-Kart Heats",body:"Set the heat format to 4-Kart in Settings to fill the lobby to four. Only the two bracket racers matter — whoever of them places higher takes the race."},
-  {icon:"🎮",title:"Track Selection",body:"Agree on tracks before each round or use random — no take-backs after the race starts."},
-  {icon:"🏠",title:"House Rules",body:"Add your own before race 1. Blue Shell fine, rubber cup holders, whatever you agree on is law."},
+  {icon:"🚗",title:"No Drinking While Moving",body:"You can drink during the race, but only while your kart is stopped. Pull over, take your sips, then get back in it."},
+  {icon:"🍺",title:"Finish Before You Cross",body:"Your drink must be completely finished before you cross the finish line. Cross with liquid left and your finish doesn't count, so pull back and chug."},
+  {icon:"🎮",title:"Two Ways To Play",body:"Pick a mode in Settings (⚙️). Bracket is a 1v1 double-elimination ladder. Grand Prix is 4-kart heats where everyone races for points. Switching modes starts a fresh tournament."},
+  {icon:"🏁",title:"Bracket: Double Elimination",body:"Two racers per match. Your first loss drops you to the Losers Bracket; a second loss knocks you out. The Losers champ fights back to the Grand Final. Set match length to single race, Best of 3, or Best of 5."},
+  {icon:"⭐",title:"Bracket: Grand Final",body:"The Winners Bracket champ starts the Grand Final one game up. Win the next game and it's over. If the Losers champ takes it, the score levels and one final game decides everything."},
+  {icon:"🏎️",title:"Grand Prix: 4-Kart Heats",body:"Up to four race each heat. The app builds balanced heats so everyone races the same number of times. Tap racers in finishing order to score a heat."},
+  {icon:"🏆",title:"Grand Prix: Points",body:"Each heat awards 3 points for 1st, 2 for 2nd, 1 for 3rd, 0 for 4th. Points stack across all heats. Most points when the Grand Prix ends wins. Ties break by number of heat wins."},
+  {icon:"🏠",title:"House Rules",body:"Agree on tracks before each race and add your own rules before the first race. Blue shells, rubber cup holders, whatever you all agree on is law."},
 ];
 function RulesModal({onClose}:{onClose:()=>void}){
   return(
@@ -464,45 +505,67 @@ function ModalShell({title,subtitle,onClose,children}:{title:string;subtitle?:st
 
 // ─── Format / Settings Modal ──────────────────────────────────────────────────
 function FormatModal({format,onChange,onClose}:{format:Format;onChange:(f:Partial<Format>,resetNeeded:boolean)=>void;onClose:()=>void}){
+  const modeOpts:{v:Mode;label:string;sub:string;icon:string}[]=[
+    {v:"bracket",icon:"🏁",label:"Bracket",sub:"1v1 double-elimination ladder"},
+    {v:"gp",icon:"🏎️",label:"Grand Prix",sub:"4-kart heats, race for points"},
+  ];
   const seriesOpts:{v:SeriesLen;label:string;sub:string}[]=[
     {v:1,label:"Single race",sub:"One race per match"},
     {v:2,label:"Best of 3",sub:"First to 2 race wins"},
     {v:3,label:"Best of 5",sub:"First to 3 race wins"},
   ];
-  const heatOpts:{v:HeatSize;label:string;sub:string}[]=[
-    {v:2,label:"Duel (1v1)",sub:"Two racers, head to head"},
-    {v:4,label:"4-Kart Heat",sub:"Fill the lobby to 4; higher-placing bracket racer wins"},
+  const gpOpts:{v:number;label:string;sub:string}[]=[
+    {v:3,label:"Short (3 each)",sub:"Everyone races at least 3 heats"},
+    {v:4,label:"Standard (4 each)",sub:"Everyone races at least 4 heats"},
+    {v:5,label:"Long (5 each)",sub:"Everyone races at least 5 heats"},
   ];
+  const Row=({active,onClick,icon,label,sub}:{active:boolean;onClick:()=>void;icon?:string;label:string;sub:string})=>(
+    <button onClick={onClick} style={{touchAction:"manipulation"}}
+      className={`flex items-center justify-between text-left px-3 py-2 rounded-[10px] border-2 border-[var(--ink)] cursor-pointer transition-all ${active?"bg-[var(--sun)] shadow-[0_2px_0_rgba(22,35,59,.22)]":"bg-white hover:bg-[#F5EFE0]"}`}>
+      <span className="flex items-center gap-2">
+        {icon&&<span className="text-[17px]">{icon}</span>}
+        <span><span className="font-[Fredoka] font-bold text-[13px] text-[var(--ink)]">{label}</span><span className="block font-[Nunito] text-[11px] font-semibold text-[var(--muted)]">{sub}</span></span>
+      </span>
+      {active&&<span className="text-[var(--ink)] font-bold">✓</span>}
+    </button>
+  );
   return(
     <ModalShell onClose={onClose} title="⚙️ FORMAT" subtitle="Set this before you start racing.">
       <div className="px-5 py-4 flex flex-col gap-5">
         <div>
-          <div className="font-[Fredoka] font-bold text-[13px] text-[var(--ink)] mb-2">Match length</div>
+          <div className="font-[Fredoka] font-bold text-[13px] text-[var(--ink)] mb-2">Tournament mode</div>
           <div className="flex flex-col gap-2">
-            {seriesOpts.map(o=>(
-              <button key={o.v} onClick={()=>onChange({series:o.v}, o.v!==format.series)}
-                style={{touchAction:"manipulation"}}
-                className={`flex items-center justify-between text-left px-3 py-2 rounded-[10px] border-2 border-[var(--ink)] cursor-pointer transition-all ${format.series===o.v?"bg-[var(--sun)] shadow-[0_2px_0_rgba(22,35,59,.22)]":"bg-white hover:bg-[#F5EFE0]"}`}>
-                <span><span className="font-[Fredoka] font-bold text-[13px] text-[var(--ink)]">{o.label}</span><span className="block font-[Nunito] text-[11px] font-semibold text-[var(--muted)]">{o.sub}</span></span>
-                {format.series===o.v&&<span className="text-[var(--ink)] font-bold">✓</span>}
-              </button>
+            {modeOpts.map(o=>(
+              <Row key={o.v} active={format.mode===o.v} icon={o.icon} label={o.label} sub={o.sub}
+                onClick={()=>onChange({mode:o.v}, o.v!==format.mode)}/>
             ))}
           </div>
-          <p className="font-[Nunito] text-[10.5px] font-semibold text-[var(--muted)] mt-1.5 leading-snug">Changing match length clears recorded results. The Grand Final always uses the winners-bracket head start.</p>
+          <p className="font-[Nunito] text-[10.5px] font-semibold text-[var(--muted)] mt-1.5 leading-snug">Switching modes starts a fresh tournament.</p>
         </div>
-        <div>
-          <div className="font-[Fredoka] font-bold text-[13px] text-[var(--ink)] mb-2">Heat format</div>
-          <div className="flex flex-col gap-2">
-            {heatOpts.map(o=>(
-              <button key={o.v} onClick={()=>onChange({heatSize:o.v}, false)}
-                style={{touchAction:"manipulation"}}
-                className={`flex items-center justify-between text-left px-3 py-2 rounded-[10px] border-2 border-[var(--ink)] cursor-pointer transition-all ${format.heatSize===o.v?"bg-[var(--sun)] shadow-[0_2px_0_rgba(22,35,59,.22)]":"bg-white hover:bg-[#F5EFE0]"}`}>
-                <span><span className="font-[Fredoka] font-bold text-[13px] text-[var(--ink)]">{o.label}</span><span className="block font-[Nunito] text-[11px] font-semibold text-[var(--muted)]">{o.sub}</span></span>
-                {format.heatSize===o.v&&<span className="text-[var(--ink)] font-bold">✓</span>}
-              </button>
-            ))}
+
+        {format.mode==="bracket"?(
+          <div>
+            <div className="font-[Fredoka] font-bold text-[13px] text-[var(--ink)] mb-2">Match length</div>
+            <div className="flex flex-col gap-2">
+              {seriesOpts.map(o=>(
+                <Row key={o.v} active={format.series===o.v} label={o.label} sub={o.sub}
+                  onClick={()=>onChange({series:o.v}, o.v!==format.series)}/>
+              ))}
+            </div>
+            <p className="font-[Nunito] text-[10.5px] font-semibold text-[var(--muted)] mt-1.5 leading-snug">Changing match length clears recorded results. The Grand Final always uses the winners-bracket head start.</p>
           </div>
-        </div>
+        ):(
+          <div>
+            <div className="font-[Fredoka] font-bold text-[13px] text-[var(--ink)] mb-2">Grand Prix length</div>
+            <div className="flex flex-col gap-2">
+              {gpOpts.map(o=>(
+                <Row key={o.v} active={format.gpRaces===o.v} label={o.label} sub={o.sub}
+                  onClick={()=>onChange({gpRaces:o.v}, o.v!==format.gpRaces)}/>
+              ))}
+            </div>
+            <p className="font-[Nunito] text-[10.5px] font-semibold text-[var(--muted)] mt-1.5 leading-snug">3 points for 1st, 2 for 2nd, 1 for 3rd, 0 for 4th. Most points wins. Changing length clears recorded heats.</p>
+          </div>
+        )}
       </div>
     </ModalShell>
   );
@@ -560,7 +623,7 @@ function ShareModal({code,status,liveUrl,snapshotUrl,onClose,onRetry}:{
               <QRCodeSVG value={liveUrl} size={196} bgColor="#FFFFFF" fgColor="#16233B" level="M" includeMargin={false}/>
             </div>
             <p className="font-[Nunito] text-[12px] font-semibold text-[var(--muted)] text-center leading-relaxed m-0">
-              Scan to watch the bracket update in real time as you record results. Anyone with the link follows along live — they can't edit.
+              Scan to watch the bracket update in real time as you record results. Anyone with the link follows along live, but can't edit.
             </p>
             <CopyRow value={liveUrl} id="live" copied={copied} onCopy={copy}/>
           </>
@@ -617,6 +680,154 @@ function MatchHistory({BR,M,series,groupTitleById}:{BR:Bracket;M:Record<string,M
   );
 }
 
+// ─── Grand Prix view ──────────────────────────────────────────────────────────
+const POS_LABEL = ["1st","2nd","3rd","4th"];
+const POS_COLOR = ["var(--sun)","#D8DEE9","#E8B98A","#EDE8DC"];
+
+function GrandPrix({names,realCount,gpLog,target,readOnly,onRecord,onUndo}:{
+  names:string[];realCount:number;gpLog:number[][];target:number;readOnly:boolean;
+  onRecord:(order:number[])=>void;onUndo:()=>void;
+}){
+  const nameOf=(seed:number)=>names[seed]?.trim()||`Racer ${seed+1}`;
+  const total=gpTotalRaces(realCount,target);
+  const done=gpLog.length;
+  const complete=gpComplete(realCount,target,gpLog);
+  const standings=gpStandings(realCount,gpLog);
+  const heat=complete?[]:gpNextHeat(realCount,gpLog);
+
+  // in-progress finishing order (local, host only)
+  const [order,setOrder]=useState<number[]>([]);
+  const [logOpen,setLogOpen]=useState(false);
+  // reset the in-progress order whenever the heat changes (new race or undo)
+  const heatKey=heat.join(",")+"|"+done;
+  const [lastKey,setLastKey]=useState(heatKey);
+  if(heatKey!==lastKey){ setLastKey(heatKey); if(order.length) setOrder([]); }
+
+  const tap=(seed:number)=>{
+    if(readOnly||order.includes(seed))return;
+    let next=[...order,seed];
+    // auto-place the final racer when only one remains
+    const remaining=heat.filter(s=>!next.includes(s));
+    if(remaining.length===1)next=[...next,remaining[0]];
+    setOrder(next);
+  };
+  const placed=(seed:number)=>order.indexOf(seed);
+  const ready=order.length===heat.length&&heat.length>0;
+
+  const raceLog=done===0?null:(
+    <div className="mt-5 border-t-2 border-dotted border-[#C9BFA8] pt-3">
+      <button onClick={()=>setLogOpen(o=>!o)} style={{touchAction:"manipulation"}}
+        className="w-full flex items-center justify-between font-[Fredoka] font-bold text-[13px] text-[var(--ink)] cursor-pointer py-1">
+        <span>📜 Heat History <span className="text-[var(--muted)] font-semibold">({done})</span></span>
+        <span className={`transition-transform ${logOpen?"rotate-90":""}`}>▸</span>
+      </button>
+      {logOpen&&(
+        <div className="mt-2 flex flex-col gap-1.5">
+          {gpLog.map((race,i)=>(
+            <div key={i} className="flex items-center gap-2 bg-white border border-[var(--ink)] rounded-[8px] px-2.5 py-1.5 shadow-[0_1px_0_rgba(22,35,59,.1)]">
+              <span className="font-[Fredoka] font-bold text-[9px] text-[var(--ink-soft)] w-10 flex-shrink-0">Heat {i+1}</span>
+              <span className="font-[Nunito] text-[11.5px] font-bold text-[var(--ink)] flex-1 min-w-0 truncate">
+                {race.map((seed,pos)=>(
+                  <span key={pos}>
+                    <span style={{color:pos===0?"var(--grass-deep)":"var(--ink-soft)"}}>{POS_LABEL[pos]} {nameOf(seed)}</span>
+                    {pos<race.length-1?<span className="text-[var(--muted)]">{"  ·  "}</span>:null}
+                  </span>
+                ))}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  return(
+    <section className="mt-5">
+      <div className="flex items-center gap-3 mb-3">
+        <span className="w-3 h-3 border-2 border-[var(--ink)] rotate-45 rounded-sm flex-shrink-0" style={{background:"var(--grape)"}}/>
+        <span className="font-[Luckiest_Guy,cursive] text-[17px] tracking-wider text-white rounded-[9px] px-3 py-0.5 shadow-[0_3px_0_rgba(22,35,59,.22)] flex-shrink-0"
+          style={{background:"var(--grape)",border:"2px solid var(--ink)",transform:"rotate(-1deg)"}}>Grand Prix</span>
+        <span className="font-[Fredoka] font-bold text-[12px] text-[var(--ink-soft)] flex-shrink-0">Heat {Math.min(done+ (complete?0:1),total)} of {total}</span>
+        <span className="h-[2px] bg-[var(--ink)] opacity-15 flex-1 rounded"/>
+      </div>
+
+      <div className="flex flex-wrap gap-5 items-start">
+        {/* Current heat / champion */}
+        <div className="flex-1 min-w-[280px]">
+          {complete?(
+            <div className="rounded-2xl border-[3px] border-[var(--ink)] flex flex-col items-center justify-center gap-3 px-8 py-8 text-center"
+              style={{background:"radial-gradient(130% 130% at 50% -10%,rgba(255,192,46,.7),rgba(255,192,46,0) 62%),var(--card2)",boxShadow:"0 6px 0 rgba(22,35,59,.22), 0 12px 32px rgba(22,35,59,.12)",animation:"champPop .4s cubic-bezier(.34,1.56,.64,1) both"}}>
+              <span style={{fontSize:52,lineHeight:1,filter:"drop-shadow(0 4px 0 rgba(22,35,59,.18))",animation:"champBounce 1.8s ease-in-out infinite"}}>🍻</span>
+              <div>
+                <div className="font-[Fredoka] tracking-[3px] text-[11px] text-[var(--sun-deep)] font-bold uppercase mb-1">🏆 Grand Prix Champion 🏆</div>
+                <div className="font-[Luckiest_Guy,cursive] text-[clamp(22px,4vw,34px)] text-[var(--ink)] leading-tight tracking-wide" style={{textShadow:"2px 2px 0 rgba(22,35,59,.1)"}}>{nameOf(standings[0].seed)}</div>
+                <div className="font-[Fredoka] font-semibold text-[13px] text-[var(--ink-soft)] mt-1">{standings[0].points} pts over {standings[0].races} heats</div>
+              </div>
+              {!readOnly&&<button onClick={onUndo} style={{touchAction:"manipulation"}}
+                className="font-[Fredoka] font-semibold text-[12px] bg-white text-[var(--ink)] border-2 border-[var(--ink)] rounded-[9px] px-3 py-1.5 shadow-[0_2px_0_rgba(22,35,59,.22)] active:translate-y-px cursor-pointer">↺ Undo last heat</button>}
+            </div>
+          ):(
+            <div className="rounded-2xl border-[3px] border-[var(--ink)] bg-white p-4 shadow-[0_4px_0_rgba(22,35,59,.14)]">
+              <div className="flex items-center justify-between mb-3">
+                <span className="font-[Fredoka] font-bold text-[14px] text-[var(--ink)]">🏁 Now Racing</span>
+                <span className="font-[Nunito] font-bold text-[10.5px] text-[var(--muted)]">{readOnly?"Tap order on host screen":"Tap in finishing order"}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {heat.map(seed=>{
+                  const p=placed(seed);
+                  const assigned=p>=0;
+                  return(
+                    <button key={seed} disabled={readOnly||assigned} onClick={()=>tap(seed)} style={{touchAction:"manipulation"}}
+                      className={`relative flex items-center gap-2 px-3 py-3 rounded-[11px] border-2 border-[var(--ink)] text-left transition-all ${assigned?"":"bg-[#F7F2E6] hover:bg-[var(--sun)] cursor-pointer active:translate-y-px"} ${readOnly&&!assigned?"opacity-90 cursor-default":""}`}>
+                      <span className="inline-grid place-items-center w-[22px] h-[22px] rounded-[5px] border border-[var(--ink)] text-[10px] font-bold flex-shrink-0"
+                        style={{background:assigned?POS_COLOR[p]:"#fff",color:"var(--ink)"}}>{assigned?p+1:"·"}</span>
+                      <span className="font-[Fredoka] font-bold text-[13px] text-[var(--ink)] flex-1 min-w-0 truncate">{nameOf(seed)}</span>
+                      {assigned&&<span className="font-[Nunito] font-bold text-[10px] text-[var(--muted)] flex-shrink-0">{POS_LABEL[p]} · +{gpPointsFor(p)}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+              {!readOnly&&(
+                <div className="flex items-center gap-2 mt-3">
+                  <button disabled={!ready} onClick={()=>{if(ready){onRecord(order);setOrder([]);}}} style={{touchAction:"manipulation"}}
+                    className={`flex-1 font-[Fredoka] font-bold text-[13px] px-3 py-2.5 rounded-[10px] border-2 border-[var(--ink)] shadow-[0_3px_0_rgba(22,35,59,.22)] transition-all ${ready?"bg-[var(--grass)] text-white hover:brightness-105 active:translate-y-px cursor-pointer":"bg-[#E7E2D5] text-[var(--muted)] cursor-default"}`}>
+                    {ready?"✔ Save heat result":`Tap ${heat.length-order.length} more`}
+                  </button>
+                  {order.length>0&&<button onClick={()=>setOrder([])} style={{touchAction:"manipulation"}}
+                    className="font-[Fredoka] font-semibold text-[12px] bg-white text-[var(--ink)] border-2 border-[var(--ink)] rounded-[10px] px-3 py-2.5 shadow-[0_2px_0_rgba(22,35,59,.22)] active:translate-y-px cursor-pointer">Clear</button>}
+                  {done>0&&<button onClick={onUndo} title="Undo last saved heat" style={{touchAction:"manipulation"}}
+                    className="font-[Fredoka] font-semibold text-[12px] bg-white text-[var(--ink)] border-2 border-[var(--ink)] rounded-[10px] px-3 py-2.5 shadow-[0_2px_0_rgba(22,35,59,.22)] active:translate-y-px cursor-pointer">↺</button>}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Leaderboard */}
+        <div className="flex-1 min-w-[260px]">
+          <div className="font-[Fredoka] font-bold text-[12px] text-[var(--ink-soft)] mb-1.5 pb-1 border-b border-dotted border-[#C9BFA8]">🏆 Standings</div>
+          <div className="flex flex-col gap-1.5">
+            {standings.map(r=>{
+              const leader=r.rank===1&&done>0;
+              return(
+                <div key={r.seed} className={`flex items-center gap-2 border-2 border-[var(--ink)] rounded-[9px] px-2.5 py-1.5 ${leader?"bg-[var(--sun)] shadow-[0_2px_0_rgba(22,35,59,.18)]":"bg-white"}`}>
+                  <span className="font-[Luckiest_Guy,cursive] text-[14px] text-[var(--ink)] w-6 flex-shrink-0 text-center">{r.rank}</span>
+                  <span className="font-[Fredoka] font-bold text-[13px] text-[var(--ink)] flex-1 min-w-0 truncate">{nameOf(r.seed)}</span>
+                  <span className="font-[Nunito] font-bold text-[10px] text-[var(--muted)] flex-shrink-0">{r.races} heats</span>
+                  <span className="font-[Luckiest_Guy,cursive] text-[16px] text-[var(--ink)] flex-shrink-0 min-w-[26px] text-right">{r.points}</span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="mt-2 font-[Nunito] text-[10.5px] font-semibold text-[var(--muted)] leading-snug">3 / 2 / 1 / 0 points for 1st through 4th. Most points after {total} heats wins.</p>
+        </div>
+      </div>
+
+      {raceLog}
+    </section>
+  );
+}
+
 // ─── Spectator state encode / decode ──────────────────────────────────────────
 function encodeShare(s:SavedState):string{ return compressToEncodedURIComponent(JSON.stringify(s)); }
 function buildShareURL(s:SavedState):string{
@@ -655,8 +866,9 @@ export default function App(){
       results:base.results||{},
       series:base.series||{},
       format:{...DEFAULT_FORMAT,...(base.format||{})},
+      gpLog:Array.isArray(base.gpLog)?base.gpLog:[],
     };
-    return {playerCount:DEFAULT_COUNT,names:Array(DEFAULT_COUNT).fill(""),results:{},series:{},format:DEFAULT_FORMAT};
+    return {playerCount:DEFAULT_COUNT,names:Array(DEFAULT_COUNT).fill(""),results:{},series:{},format:DEFAULT_FORMAT,gpLog:[]};
   },[spectatorInit,isSpectator]);
 
   const [playerCount,setPlayerCount]=useState(initial.playerCount);
@@ -664,6 +876,7 @@ export default function App(){
   const [results,setResults]=useState<Record<string,"A"|"B">>(initial.results);
   const [series,setSeries]=useState<Series>(initial.series);
   const [format,setFormat]=useState<Format>(initial.format);
+  const [gpLog,setGpLog]=useState<number[][]>(initial.gpLog);
   const [BR,setBR]=useState<Bracket>(()=>buildBracket(initial.playerCount));
   const [rulesOpen,setRulesOpen]=useState(false);
   const [formatOpen,setFormatOpen]=useState(false);
@@ -677,20 +890,20 @@ export default function App(){
   // Persist (host only — never overwrite saved state while viewing a shared snapshot)
   useEffect(()=>{
     if(isSpectator||typeof localStorage==="undefined")return;
-    try{localStorage.setItem(STORAGE_KEY,JSON.stringify({playerCount,names,results,series,format}));}catch{/* quota */}
-  },[isSpectator,playerCount,names,results,series,format]);
+    try{localStorage.setItem(STORAGE_KEY,JSON.stringify({playerCount,names,results,series,format,gpLog}));}catch{/* quota */}
+  },[isSpectator,playerCount,names,results,series,format,gpLog]);
 
   // Host: push state to the live room (debounced) whenever it changes
   useEffect(()=>{
     if(isSpectator||!sessionCode)return;
     const t=setTimeout(()=>{
       fetch(`${API}/sessions/${sessionCode}`,{method:"PUT",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({state:{playerCount,names,results,series,format}})})
+        body:JSON.stringify({state:{playerCount,names,results,series,format,gpLog}})})
         .then(r=>{if(!r.ok)throw new Error();setLiveStatus("live");})
         .catch(()=>setLiveStatus("error"));
     },600);
     return ()=>clearTimeout(t);
-  },[isSpectator,sessionCode,playerCount,names,results,series,format]);
+  },[isSpectator,sessionCode,playerCount,names,results,series,format,gpLog]);
 
   // Spectator: poll the live room every few seconds and mirror its state
   useEffect(()=>{
@@ -704,6 +917,7 @@ export default function App(){
       setResults(s.results||{});
       setSeries(s.series||{});
       setFormat({...DEFAULT_FORMAT,...(s.format||{})});
+      setGpLog(Array.isArray(s.gpLog)?s.gpLog:[]);
       setBR(buildBracket(pc));
     };
     const tick=async()=>{
@@ -721,7 +935,7 @@ export default function App(){
   // Host: open a live room (create on first share, reuse the saved code after)
   const startLive=useCallback(async ()=>{
     setLiveStatus("connecting");
-    const payload=JSON.stringify({state:{playerCount,names,results,series,format}});
+    const payload=JSON.stringify({state:{playerCount,names,results,series,format,gpLog}});
     try{
       if(sessionCode){
         const r=await fetch(`${API}/sessions/${sessionCode}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:payload});
@@ -735,14 +949,14 @@ export default function App(){
       try{localStorage.setItem(SESSION_KEY,code);}catch{/* ignore */}
       setLiveStatus("live");
     }catch{setLiveStatus("error");}
-  },[sessionCode,playerCount,names,results,series,format]);
+  },[sessionCode,playerCount,names,results,series,format,gpLog]);
 
   const handleSetCount=useCallback((n:number)=>{
     const next=Math.max(MIN_PLAYERS,Math.min(MAX_PLAYERS,n));
     if(next===playerCount)return;
     setPlayerCount(next);
     setNames(prev=>{const a=[...prev];while(a.length<next)a.push("");return a.slice(0,next);});
-    setResults({});setSeries({});setBR(buildBracket(next));
+    setResults({});setSeries({});setGpLog([]);setBR(buildBracket(next));
   },[playerCount]);
 
   const handleNameChange=useCallback((i:number,val:string)=>{
@@ -754,11 +968,21 @@ export default function App(){
       const real=prev.map(n=>n.trim()).filter(Boolean);
       for(let i=real.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[real[i],real[j]]=[real[j],real[i]];}
       return prev.map((_,i)=>real[i]||"");
-    });setResults({});setSeries({});
+    });setResults({});setSeries({});setGpLog([]);
   },[]);
 
-  const handleReset=useCallback(()=>{setResults({});setSeries({});},[]);
-  const handleClearAll=useCallback(()=>{setNames(Array(playerCount).fill(""));setResults({});setSeries({});},[playerCount]);
+  const handleReset=useCallback(()=>{setResults({});setSeries({});setGpLog([]);},[]);
+  const handleClearAll=useCallback(()=>{setNames(Array(playerCount).fill(""));setResults({});setSeries({});setGpLog([]);},[playerCount]);
+
+  // Grand Prix: record / undo a heat result
+  const handleRecordRace=useCallback((order:number[])=>{
+    if(isSpectator)return;
+    setGpLog(prev=>[...prev,order]);
+  },[isSpectator]);
+  const handleUndoRace=useCallback(()=>{
+    if(isSpectator)return;
+    setGpLog(prev=>prev.slice(0,-1));
+  },[isSpectator]);
 
   const handleSlotClick=useCallback((matchId:string,slot:"A"|"B")=>{
     if(isSpectator)return;
@@ -794,30 +1018,42 @@ export default function App(){
 
   const handleFormatChange=useCallback((partial:Partial<Format>,resetNeeded:boolean)=>{
     if(resetNeeded){
-      const ok=typeof window==="undefined"?true:window.confirm("Changing match length clears recorded results. Continue?");
+      const msg=partial.mode?"Switching modes starts a fresh tournament. Continue?":"Changing the format clears recorded results. Continue?";
+      const ok=typeof window==="undefined"?true:window.confirm(msg);
       if(!ok)return;
-      setResults({});setSeries({});
+      setResults({});setSeries({});setGpLog([]);
     }
     setFormat(f=>({...f,...partial}));
   },[]);
 
   const editCopy=useCallback(()=>{
     // Spectator → take a local editable copy
-    try{localStorage.setItem(STORAGE_KEY,JSON.stringify({playerCount,names,results,series,format}));}catch{/* ignore */}
+    try{localStorage.setItem(STORAGE_KEY,JSON.stringify({playerCount,names,results,series,format,gpLog}));}catch{/* ignore */}
     location.href=location.origin+location.pathname;
-  },[playerCount,names,results,series,format]);
+  },[playerCount,names,results,series,format,gpLog]);
 
   const M=compute(BR,names,results);
   const champ=getChampion(M);
   const realCount=names.filter(n=>n&&n.trim()).length;
+  const isGP=format.mode==="gp";
 
-  let done=0,playable=0;
-  for(const id in M){
-    const m=M[id];if(!m.active)continue;
-    const aR=m.a!==TBD&&m.a!==BYE,bR=m.b!==TBD&&m.b!==BYE;
-    if(aR&&bR&&!m.auto){playable++;if(m.decided)done++;}
+  // Heats counter: fixed denominator from the start.
+  // Bracket: a double-elim with N real racers always plays 2N-2 heats (plus one if a Grand Final reset is forced).
+  // Grand Prix: the planned number of heats for everyone to race the chosen amount.
+  let done=0,total=0;
+  if(isGP){
+    done=gpLog.length;
+    total=gpTotalRaces(realCount,format.gpRaces);
+  }else{
+    for(const id in M){
+      const m=M[id];if(!m.active)continue;
+      const aR=m.a!==TBD&&m.a!==BYE,bR=m.b!==TBD&&m.b!==BYE;
+      if(aR&&bR&&!m.auto&&m.decided)done++;
+    }
+    const gfReset=!!(M["GF2"]&&M["GF2"].active);
+    total=realCount>=2?(2*realCount-2+(gfReset?1:0)):0;
   }
-  const pct=playable?Math.round(done/playable*100):0;
+  const pct=total?Math.round(done/total*100):0;
   const S=nextPow2(playerCount),byes=S-playerCount;
   const capText=byes>0?`${byes} bye${byes>1?"s":""}→${S}-slot`:`clean ${S}-slot`;
 
@@ -845,7 +1081,7 @@ export default function App(){
   },[BR]);
 
   const liveUrl=useMemo(()=>(sessionCode&&typeof location!=="undefined")?`${location.origin}${location.pathname}?s=${sessionCode}`:"",[sessionCode]);
-  const snapshotUrl=useMemo(()=>shareOpen?buildShareURL({playerCount,names,results,series,format}):"",[shareOpen,playerCount,names,results,series,format]);
+  const snapshotUrl=useMemo(()=>shareOpen?buildShareURL({playerCount,names,results,series,format,gpLog}):"",[shareOpen,playerCount,names,results,series,format,gpLog]);
 
   return(
     <>
@@ -890,8 +1126,8 @@ export default function App(){
               <div className="flex items-center gap-3.5 bg-[var(--foam)] border-2 border-[var(--ink)] rounded-[11px] px-3 py-2 shadow-[0_3px_0_rgba(22,35,59,.18)]">
                 <BeerMug pct={pct}/>
                 <div className="font-[Fredoka]">
-                  <div className="text-[19px] font-bold text-[var(--ink)] leading-none">{done} / {playable}</div>
-                  <div className="text-[10px] text-[var(--ink-soft)] tracking-widest font-semibold mt-0.5">🍄 Heats Run</div>
+                  <div className="text-[19px] font-bold text-[var(--ink)] leading-none">{done} / {total}</div>
+                  <div className="text-[10px] text-[var(--ink-soft)] tracking-widest font-semibold mt-0.5">{isGP?"🏎️ Heats Run":"🍄 Heats Run"}</div>
                 </div>
               </div>
             </div>
@@ -906,9 +1142,9 @@ export default function App(){
                 {isLive?(
                   <>
                     <span className="w-2.5 h-2.5 rounded-full inline-block" style={{background:liveStatus==="live"?"#7CFFB0":"#FFC9C9"}}/>
-                    {liveStatus==="error"?"Can't reach the host — the room may have ended.":liveStatus==="live"?"Watching live — updates automatically.":"Connecting to live room…"}
+                    {liveStatus==="error"?"Can't reach the host. The room may have ended.":liveStatus==="live"?"Watching live, updates automatically.":"Connecting to live room…"}
                   </>
-                ):"📺 You're watching a shared snapshot — read only."}
+                ):"📺 You're watching a shared snapshot, read only."}
               </span>
               <button onClick={editCopy} style={{touchAction:"manipulation"}}
                 className="font-[Fredoka] font-bold text-[12px] bg-white text-[var(--ink)] border-2 border-[var(--ink)] rounded-[8px] px-3 py-1 shadow-[0_2px_0_rgba(22,35,59,.25)] active:translate-y-px cursor-pointer">Edit a copy</button>
@@ -930,7 +1166,7 @@ export default function App(){
                     className="w-6 h-6 rounded-[6px] border-2 border-[var(--ink)] bg-[var(--sun)] text-[var(--ink)] font-bold text-base cursor-pointer grid place-items-center shadow-[0_2px_0_rgba(22,35,59,.26)] active:translate-y-px transition-all disabled:opacity-40 hover:bg-[var(--sun-deep)]">+</button>
                   <span className="font-[Nunito] font-semibold text-[10px] text-[var(--muted)]">{capText}</span>
                   <span className="font-[Nunito] font-semibold text-[10px] text-[var(--ink)] bg-[var(--card2)] border border-[var(--ink)] rounded-full px-2 py-px">
-                    {format.heatSize===4?"4-kart":"duel"} · {format.series===1?"single":format.series===2?"Bo3":"Bo5"}
+                    {isGP?`grand prix · ${format.gpRaces} each`:`bracket · ${format.series===1?"single":format.series===2?"Bo3":"Bo5"}`}
                   </span>
                 </span>
               </div>
@@ -964,8 +1200,11 @@ export default function App(){
             <div className="mt-6 border-2 border-dashed border-[var(--ink)] rounded-[14px] p-10 text-center bg-[#FBF6EA]">
               <span className="text-4xl block mb-3">🏁</span>
               <h3 className="font-[Luckiest_Guy,cursive] text-[var(--ink)] text-xl tracking-wider m-0 mb-2">READY TO RACE?</h3>
-              <p className="font-[Nunito] font-semibold text-[var(--muted)] text-[13px] m-0 leading-relaxed">Drop in at least two racer names above — the bracket builds itself.</p>
+              <p className="font-[Nunito] font-semibold text-[var(--muted)] text-[13px] m-0 leading-relaxed">Drop in at least two racer names above and {isGP?"start your Grand Prix.":"the bracket builds itself."}</p>
             </div>
+          ):isGP?(
+            <GrandPrix names={names} realCount={realCount} gpLog={gpLog} target={format.gpRaces}
+              readOnly={isSpectator} onRecord={handleRecordRace} onUndo={handleUndoRace}/>
           ):(
             <>
               <BracketSection groups={wbGroups} M={M} onSlotClick={handleSlotClick}
@@ -1017,7 +1256,7 @@ export default function App(){
                       <MatchCard key={id} m={M[id]} onSlotClick={handleSlotClick} label={id==="GF"?"Game 1":"Reset · G2"}
                         seriesMap={series} format={format} readOnly={isSpectator} onReset={handleResetMatch}/>
                     ))}
-                    {showReset&&<p className="font-[Nunito] text-[10.5px] font-bold text-[var(--grape-deep)] leading-snug">Lower-bracket forced a reset — one more game decides it.</p>}
+                    {showReset&&<p className="font-[Nunito] text-[10.5px] font-bold text-[var(--grape-deep)] leading-snug">Lower-bracket forced a reset. One more game decides it.</p>}
                   </div>
                   {champ?(
                     <div className="flex-1 min-w-[220px] rounded-2xl border-[3px] border-[var(--ink)] flex flex-col items-center justify-center gap-3 px-8 py-8 text-center"
