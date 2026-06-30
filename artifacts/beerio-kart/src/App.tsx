@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { compressToEncodedURIComponent, decompressFromEncodedURIComponent } from "lz-string";
 
@@ -219,6 +220,16 @@ function getChampion(M:Record<string,MatchResult>):Player|null{
   if(gf&&gf.decided&&isReal(gf.winner)){
     if(gf.winSlot==="A")return gf.winner;
     if(gf2&&gf2.decided&&isReal(gf2.winner))return gf2.winner;
+  }
+  return null;
+}
+// Runner-up: the loser of whichever match actually decided the tournament (GF, or GF2 if reset happened)
+function getRunnerUp(M:Record<string,MatchResult>):Player|null{
+  const isReal=(p:Competitor):p is Player=>p!==TBD&&p!==BYE;
+  const gf=M["GF"],gf2=M["GF2"];
+  if(gf&&gf.decided&&isReal(gf.winner)){
+    if(gf.winSlot==="A")return isReal(gf.loser)?gf.loser:null;
+    if(gf2&&gf2.decided&&isReal(gf2.winner))return isReal(gf2.loser)?gf2.loser:null;
   }
   return null;
 }
@@ -680,6 +691,168 @@ function MatchHistory({BR,M,series,groupTitleById}:{BR:Bracket;M:Record<string,M
   );
 }
 
+// ─── Victory celebration: centered popup modal + confetti + chime ─────────────
+const CONFETTI_COLORS = ["var(--sun)","var(--grass)","var(--coral)","var(--grape)","#fff"];
+const CELEBRATED_PREFIX = "bk-celebrated:";
+
+// Full-viewport confetti rain (rendered into the modal portal, not clipped to the card)
+function Confetti({burstKey}:{burstKey:string}){
+  // Re-randomize only when the burst key changes (i.e. a new champion is crowned)
+  const pieces=useMemo(()=>Array.from({length:34},(_,i)=>({
+    id:i,
+    left:Math.random()*100,
+    delay:Math.random()*0.4,
+    duration:2.2+Math.random()*1.5,
+    drift:(Math.random()*90-45),
+    fall:58+Math.random()*38, // vh — guarantees it crosses the full screen on any device
+    size:5+Math.random()*5,
+    color:CONFETTI_COLORS[i%CONFETTI_COLORS.length],
+    spin:Math.random()*360,
+  })),[burstKey]);
+  return(
+    <div className="confetti-field" aria-hidden="true">
+      {pieces.map(p=>(
+        <span key={p.id} className="confetti-piece" style={{
+          left:`${p.left}%`,
+          width:p.size,height:p.size*0.42,
+          background:p.color,
+          animationDelay:`${p.delay}s`,
+          animationDuration:`${p.duration}s`,
+          ["--drift" as any]:`${p.drift}px`,
+          ["--spin" as any]:`${p.spin}deg`,
+          ["--fall" as any]:`${p.fall}vh`,
+        }}/>
+      ))}
+    </div>
+  );
+}
+
+// Tiny built-in victory chime, no audio file needed. Best-effort; never throws.
+function playVictoryChime(){
+  try{
+    const Ctx=(window as any).AudioContext||(window as any).webkitAudioContext;
+    if(!Ctx)return;
+    const ctx=new Ctx();
+    const notes=[523.25,659.25,783.99,1046.5]; // C5 E5 G5 C6
+    notes.forEach((freq,i)=>{
+      const t=ctx.currentTime+i*0.11;
+      const osc=ctx.createOscillator();
+      const gain=ctx.createGain();
+      osc.type="triangle";
+      osc.frequency.setValueAtTime(freq,t);
+      gain.gain.setValueAtTime(0,t);
+      gain.gain.linearRampToValueAtTime(0.18,t+0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001,t+0.5);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t);osc.stop(t+0.55);
+    });
+    setTimeout(()=>ctx.close().catch(()=>{}),900);
+  }catch{/* best effort, silent */}
+}
+
+// Drives the champion popup. The first time THIS DEVICE ever renders a given
+// completion (key) — whether that's live, or because the app was closed and
+// reopened after the finish — it auto-opens with full confetti + chime, and
+// remembers it in localStorage so it won't keep auto-popping after that.
+// A small chip stays in the page so it can always be reopened (with a fresh
+// celebration replay) on request.
+function useEndCard(active:boolean,key:string){
+  const [open,setOpen]=useState(false);
+  const [burst,setBurst]=useState(0);
+  const lastKey=useRef<string|null>(null);
+
+  useEffect(()=>{
+    if(!active||!key){ lastKey.current=null; return; }
+    if(lastKey.current===key)return; // already handled this key during this mount
+    lastKey.current=key;
+    let alreadySeen=false;
+    try{ alreadySeen=!!localStorage.getItem(CELEBRATED_PREFIX+key); }catch{/* ignore */}
+    if(!alreadySeen){
+      try{ localStorage.setItem(CELEBRATED_PREFIX+key,"1"); }catch{/* ignore */}
+      setOpen(true);
+      setBurst(b=>b+1);
+      playVictoryChime();
+    }
+  },[active,key]);
+
+  const reopen=useCallback(()=>{ setOpen(true); setBurst(b=>b+1); playVictoryChime(); },[]);
+  const dismiss=useCallback(()=>setOpen(false),[]);
+  return {open,burst,reopen,dismiss};
+}
+
+// Runner-up / third-place strip shown under the champion name
+function Podium({rows}:{rows:{label:string;name:string;sub?:string}[]}){
+  if(!rows.length)return null;
+  return(
+    <div className="flex flex-col gap-1 mt-1 w-full max-w-[220px]">
+      {rows.map(r=>(
+        <div key={r.label} className="flex items-center gap-2 bg-white/70 border border-[var(--ink)] rounded-[9px] px-2.5 py-1">
+          <span className="font-[Fredoka] font-bold text-[11px] text-[var(--ink-soft)] w-9 flex-shrink-0">{r.label}</span>
+          <span className="font-[Fredoka] font-bold text-[12px] text-[var(--ink)] flex-1 min-w-0 truncate text-left">{r.name}</span>
+          {r.sub&&<span className="font-[Nunito] font-bold text-[10px] text-[var(--muted)] flex-shrink-0">{r.sub}</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Centered popup, portaled to <body> so scroll position / page layout never affects it.
+// The sunburst behind it is sized off the viewport (vmax, square) so it stays a true
+// circle and fully covers the screen at any aspect ratio, not just inside the card.
+function ChampionModal({open,onClose,burstKey,celebrate,kicker,name,detail,podiumRows,onUndo,readOnly}:{
+  open:boolean;onClose:()=>void;burstKey:string;celebrate:boolean;
+  kicker:string;name:string;detail:string;
+  podiumRows:{label:string;name:string;sub?:string}[];
+  onUndo?:()=>void;readOnly?:boolean;
+}){
+  if(!open)return null;
+  return createPortal(
+    <div className="fixed inset-0 z-[60]">
+      <div className="absolute inset-0 champion-backdrop" style={{background:"rgba(22,35,59,0.6)",backdropFilter:"blur(4px)"}}
+        onClick={onClose} aria-hidden="true"/>
+      <div className="victor-sunburst" aria-hidden="true"/>
+      <div className="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
+        <div className="champion-card-pop pointer-events-auto relative overflow-hidden w-full max-w-md rounded-2xl border-[3px] border-[var(--ink)] flex flex-col items-center justify-center gap-1 px-8 py-9 text-center"
+          style={{background:"radial-gradient(130% 130% at 50% -10%,rgba(255,192,46,.7),rgba(255,192,46,0) 62%),var(--card2)",boxShadow:"0 10px 0 rgba(22,35,59,.22), 0 22px 50px rgba(22,35,59,.3)"}}>
+          <button onClick={onClose} aria-label="Close" style={{touchAction:"manipulation"}}
+            className="absolute top-3 right-3 w-8 h-8 rounded-[8px] border-2 border-[var(--ink)] bg-white text-[var(--ink)] font-bold text-lg grid place-items-center shadow-[0_2px_0_rgba(22,35,59,.22)] hover:bg-[#F5EFE0] active:translate-y-px transition-all cursor-pointer">✕</button>
+          <span className="victor-stagger" style={{["--vd" as any]:"0s",fontSize:52,lineHeight:1,filter:"drop-shadow(0 4px 0 rgba(22,35,59,.18))",animation:"champBounce 1.8s ease-in-out .5s infinite"}}>🍻</span>
+          <div className="victor-stagger" style={{["--vd" as any]:"0.12s"}}>
+            <div className="font-[Fredoka] tracking-[3px] text-[11px] text-[var(--sun-deep)] font-bold uppercase mb-1">{kicker}</div>
+          </div>
+          <div className="victor-stagger" style={{["--vd" as any]:"0.24s"}}>
+            <div className="victor-shine font-[Luckiest_Guy,cursive] text-[clamp(22px,4vw,34px)] leading-tight tracking-wide">{name}</div>
+          </div>
+          <div className="victor-stagger" style={{["--vd" as any]:"0.36s"}}>
+            <div className="font-[Fredoka] font-semibold text-[13px] text-[var(--ink-soft)] mt-1">{detail}</div>
+          </div>
+          {podiumRows.length>0&&(
+            <div className="victor-stagger" style={{["--vd" as any]:"0.48s"}}>
+              <Podium rows={podiumRows}/>
+            </div>
+          )}
+          {onUndo&&!readOnly&&(
+            <button onClick={onUndo} style={{touchAction:"manipulation",["--vd" as any]:"0.6s"}}
+              className="victor-stagger font-[Fredoka] font-semibold text-[12px] bg-white text-[var(--ink)] border-2 border-[var(--ink)] rounded-[9px] px-3 py-1.5 shadow-[0_2px_0_rgba(22,35,59,.22)] active:translate-y-px cursor-pointer mt-3">↺ Undo last heat</button>
+          )}
+        </div>
+      </div>
+      {celebrate&&<Confetti burstKey={burstKey}/>}
+    </div>,
+    document.body
+  );
+}
+
+// Small persistent chip shown in the page once the champion modal has been seen/dismissed
+function ChampionChip({label,onClick}:{label:string;onClick:()=>void}){
+  return(
+    <button onClick={onClick} style={{touchAction:"manipulation"}}
+      className="w-full flex items-center justify-center gap-2 font-[Fredoka] font-bold text-[13px] text-[var(--ink)] bg-white border-[3px] border-[var(--ink)] rounded-2xl px-4 py-3 shadow-[0_4px_0_rgba(22,35,59,.18)] active:translate-y-px transition-all cursor-pointer">
+      🏆 {label} <span className="text-[var(--muted)] font-semibold text-[11px]">— tap to view</span>
+    </button>
+  );
+}
+
 // ─── Grand Prix view ──────────────────────────────────────────────────────────
 const POS_LABEL = ["1st","2nd","3rd","4th"];
 const POS_COLOR = ["var(--sun)","#D8DEE9","#E8B98A","#EDE8DC"];
@@ -694,6 +867,8 @@ function GrandPrix({names,realCount,gpLog,target,readOnly,onRecord,onUndo}:{
   const complete=gpComplete(realCount,target,gpLog);
   const standings=gpStandings(realCount,gpLog);
   const heat=complete?[]:gpNextHeat(realCount,gpLog);
+  const celebKey=complete&&standings.length?`${standings[0].seed}|${done}`:"";
+  const {open:champOpen,burst,reopen:reopenChamp,dismiss:dismissChamp}=useEndCard(complete,celebKey);
 
   // in-progress finishing order (local, host only)
   const [order,setOrder]=useState<number[]>([]);
@@ -755,17 +930,21 @@ function GrandPrix({names,realCount,gpLog,target,readOnly,onRecord,onUndo}:{
         {/* Current heat / champion */}
         <div className="flex-1 min-w-[280px]">
           {complete?(
-            <div className="rounded-2xl border-[3px] border-[var(--ink)] flex flex-col items-center justify-center gap-3 px-8 py-8 text-center"
-              style={{background:"radial-gradient(130% 130% at 50% -10%,rgba(255,192,46,.7),rgba(255,192,46,0) 62%),var(--card2)",boxShadow:"0 6px 0 rgba(22,35,59,.22), 0 12px 32px rgba(22,35,59,.12)",animation:"champPop .4s cubic-bezier(.34,1.56,.64,1) both"}}>
-              <span style={{fontSize:52,lineHeight:1,filter:"drop-shadow(0 4px 0 rgba(22,35,59,.18))",animation:"champBounce 1.8s ease-in-out infinite"}}>🍻</span>
-              <div>
-                <div className="font-[Fredoka] tracking-[3px] text-[11px] text-[var(--sun-deep)] font-bold uppercase mb-1">🏆 Grand Prix Champion 🏆</div>
-                <div className="font-[Luckiest_Guy,cursive] text-[clamp(22px,4vw,34px)] text-[var(--ink)] leading-tight tracking-wide" style={{textShadow:"2px 2px 0 rgba(22,35,59,.1)"}}>{nameOf(standings[0].seed)}</div>
-                <div className="font-[Fredoka] font-semibold text-[13px] text-[var(--ink-soft)] mt-1">{standings[0].points} pts over {standings[0].races} heats</div>
-              </div>
-              {!readOnly&&<button onClick={onUndo} style={{touchAction:"manipulation"}}
-                className="font-[Fredoka] font-semibold text-[12px] bg-white text-[var(--ink)] border-2 border-[var(--ink)] rounded-[9px] px-3 py-1.5 shadow-[0_2px_0_rgba(22,35,59,.22)] active:translate-y-px cursor-pointer">↺ Undo last heat</button>}
-            </div>
+            <>
+              <ChampionChip label={`${nameOf(standings[0].seed)} won the Grand Prix`} onClick={reopenChamp}/>
+              <ChampionModal
+                open={champOpen} onClose={dismissChamp} burstKey={celebKey} celebrate={burst>0}
+                kicker="🏆 Grand Prix Champion 🏆"
+                name={nameOf(standings[0].seed)}
+                detail={`${standings[0].points} pts over ${standings[0].races} heats`}
+                podiumRows={standings.length>1?standings.slice(1,3).map((r,i)=>({
+                  label:i===0?"🥈 2nd":"🥉 3rd",
+                  name:nameOf(r.seed),
+                  sub:`${r.points} pts`,
+                })):[]}
+                onUndo={onUndo} readOnly={readOnly}
+              />
+            </>
           ):(
             <div className="rounded-2xl border-[3px] border-[var(--ink)] bg-white p-4 shadow-[0_4px_0_rgba(22,35,59,.14)]">
               <div className="flex items-center justify-between mb-3">
@@ -1034,6 +1213,9 @@ export default function App(){
 
   const M=compute(BR,names,results);
   const champ=getChampion(M);
+  const runnerUp=getRunnerUp(M);
+  const bracketCelebKey=champ?champ.name+"|"+champ.seed:"";
+  const {open:bracketChampOpen,burst:bracketBurst,reopen:reopenBracketChamp,dismiss:dismissBracketChamp}=useEndCard(!!champ,bracketCelebKey);
   const realCount=names.filter(n=>n&&n.trim()).length;
   const isGP=format.mode==="gp";
 
@@ -1259,14 +1441,15 @@ export default function App(){
                     {showReset&&<p className="font-[Nunito] text-[10.5px] font-bold text-[var(--grape-deep)] leading-snug">Lower-bracket forced a reset. One more game decides it.</p>}
                   </div>
                   {champ?(
-                    <div className="flex-1 min-w-[220px] rounded-2xl border-[3px] border-[var(--ink)] flex flex-col items-center justify-center gap-3 px-8 py-8 text-center"
-                      style={{background:"radial-gradient(130% 130% at 50% -10%,rgba(255,192,46,.7),rgba(255,192,46,0) 62%),var(--card2)",boxShadow:"0 6px 0 rgba(22,35,59,.22), 0 12px 32px rgba(22,35,59,.12)",animation:"champPop .4s cubic-bezier(.34,1.56,.64,1) both"}}>
-                      <span style={{fontSize:52,lineHeight:1,filter:"drop-shadow(0 4px 0 rgba(22,35,59,.18))",animation:"champBounce 1.8s ease-in-out infinite"}}>🍻</span>
-                      <div>
-                        <div className="font-[Fredoka] tracking-[3px] text-[11px] text-[var(--sun-deep)] font-bold uppercase mb-1">🏆 Champion 🏆</div>
-                        <div className="font-[Luckiest_Guy,cursive] text-[clamp(22px,4vw,34px)] text-[var(--ink)] leading-tight tracking-wide" style={{textShadow:"2px 2px 0 rgba(22,35,59,.1)"}}>{champ.name}</div>
-                      </div>
-                      <div className="font-[Fredoka] font-semibold text-[13px] text-[var(--ink-soft)]">Drinks are on the winner 🍺</div>
+                    <div className="flex-1 min-w-[220px]">
+                      <ChampionChip label={`${champ.name?.trim()||`Racer ${champ.seed+1}`} is the Champion`} onClick={reopenBracketChamp}/>
+                      <ChampionModal
+                        open={bracketChampOpen} onClose={dismissBracketChamp} burstKey={bracketCelebKey} celebrate={bracketBurst>0}
+                        kicker="🏆 Champion 🏆"
+                        name={champ.name?.trim()||`Racer ${champ.seed+1}`}
+                        detail="Drinks are on the winner 🍺"
+                        podiumRows={runnerUp?[{label:"🥈 Runner-up",name:runnerUp.name?.trim()||`Racer ${runnerUp.seed+1}`}]:[]}
+                      />
                     </div>
                   ):(
                     <div className="flex-1 min-w-[180px] max-w-[240px] rounded-xl border-2 border-dashed border-[var(--ink)] flex flex-col items-center justify-center gap-1.5 px-5 py-4 text-center bg-[#FBF6EA]">

@@ -128,3 +128,87 @@ button, [role="button"], input { touch-action: manipulation; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; }
 }
+
+/* ─── Champion modal: backdrop, popup card, sunburst, shine text, confetti ──── */
+
+.champion-backdrop { animation: championFadeIn .25s ease both; }
+@keyframes championFadeIn { 0% { opacity: 0; } 100% { opacity: 1; } }
+
+.champion-card-pop { animation: championCardPop .45s cubic-bezier(.34,1.56,.64,1) both; }
+@keyframes championCardPop {
+  0%   { opacity: 0; transform: scale(.82) translateY(10px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Each child of the card fades + lifts in on its own delay (--vd, set inline) */
+.victor-stagger {
+  opacity: 0;
+  animation: victorChild .5s cubic-bezier(.22,1,.36,1) both;
+  animation-delay: var(--vd, 0s);
+}
+@keyframes victorChild {
+  0%   { opacity: 0; transform: translateY(10px) scale(.96); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Slow rotating soft sunburst, sized off the viewport (not the card) so it's always
+   a true circle and fully overscans the screen, in portrait, landscape, or ultra-wide. */
+.victor-sunburst {
+  position: fixed;
+  top: 50%; left: 50%;
+  width: 170vmax; height: 170vmax;
+  transform: translate(-50%,-50%);
+  background: conic-gradient(from 0deg, rgba(255,192,46,.18) 0deg 18deg, transparent 18deg 36deg);
+  animation: victorSpin 14s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+@keyframes victorSpin { 0% { transform: translate(-50%,-50%) rotate(0); } 100% { transform: translate(-50%,-50%) rotate(360deg); } }
+
+/* Champion name gets a soft moving shine sweep, on the ink color so it still reads at a glance */
+.victor-shine {
+  position: relative;
+  display: inline-block;
+  color: var(--ink);
+  text-shadow: 2px 2px 0 rgba(22,35,59,.1);
+  background: linear-gradient(100deg, var(--ink) 35%, var(--sun-deep) 50%, var(--ink) 65%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: victorShine 2.6s ease-in-out 1s infinite;
+}
+@keyframes victorShine {
+  0%   { background-position: 200% 0; }
+  60%  { background-position: -40% 0; }
+  100% { background-position: -40% 0; }
+}
+
+/* Confetti: rains across the full screen (not clipped to the card), sits above everything */
+.confetti-field {
+  position: fixed; inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 2;
+}
+.confetti-piece {
+  position: absolute;
+  top: -10px;
+  border-radius: 1px;
+  opacity: 0;
+  animation-name: confettiFall;
+  animation-timing-function: cubic-bezier(.25,.46,.45,.94);
+  animation-fill-mode: forwards;
+}
+@keyframes confettiFall {
+  0%   { opacity: 1; transform: translateY(0) translateX(0) rotate(0deg); }
+  100% { opacity: 0; transform: translateY(var(--fall)) translateX(var(--drift)) rotate(var(--spin)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .champion-backdrop, .champion-card-pop,
+  .victor-stagger, .victor-sunburst, .victor-shine, .confetti-piece {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+}
